@@ -111,7 +111,16 @@ def require_dtb(path):
         matches=[p for n,p in nodes.items() if n.endswith('/'+suffix)]
         if len(matches)!=1 or matches[0].get('status')!=b'disabled\0':
             raise ValueError(f'Expected disabled node: {suffix}')
+    usb = nodes['/soc@0/usb@a6f8800/usb@a600000']
+    if usb.get('phy-names') != b'usb2-phy\0' or len(usb.get('phys', b'')) != 4:
+        raise ValueError('Diagnostic USB must use exactly one USB2 PHY')
+    phy = [p for p in nodes.values() if p.get('phandle') == usb['phys']]
+    if len(phy) != 1 or phy[0].get('status') != b'okay\0':
+        raise ValueError('USB PHY is not enabled')
+    if usb.get('dr_mode') != b'peripheral\0' or usb.get('maximum-speed') != b'high-speed\0':
+        raise ValueError('Diagnostic USB must be USB2 device-only')
     return {'model':root['model'].rstrip(b'\0').decode(),
+            'usb2_phy_only': True,
             'reserved_spans':[{'start':hex(a),'end':hex(b),'node':n} for a,b,n in spans],
             'stock_reservations_covered':True,'disabled_nodes':list(disabled),
             'result':'PASS','warning':'Structural checks only, not hardware validation'}

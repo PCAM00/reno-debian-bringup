@@ -22,7 +22,11 @@ def pack(image, dtb, ramdisk):
         raise ValueError("Invalid DTB length/magic")
     if gzip.decompress(ramdisk)[:6] != b"070701":
         raise ValueError("Expected gzip newc initramfs")
-    kernel = gzip.compress(image, compresslevel=9, mtime=0) + dtb
+    compressed = bytearray(gzip.compress(image, compresslevel=9, mtime=0))
+    # Python 3.11/3.12 expose zlib's OS=3, newer Python forces OS=255.
+    # Normalize this metadata byte so cross-host headers/IDs match.
+    compressed[9] = 255
+    kernel = bytes(compressed) + dtb
     h = bytearray(PAGE)
     h[:8] = b"ANDROID!"
     # kernel_size, kernel_addr, ramdisk_size, ramdisk_addr, second_size,

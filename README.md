@@ -54,6 +54,12 @@ The sample contains a modified vbmeta and is not proven to be an untouched
 vendor recovery package. No firmware binaries or per-device data are published
 in this repository.
 
+Reno evidence was additionally checked read-only on a PCAM00 F.55 phone:
+DTB index 4 / DTBO index 32 and fixed reserved-memory ranges match; panel reports
+AMS641RW01, touch firmware S3706. These observations still do not validate the
+new kernel or its bootloader handoff. No device identifiers or backup data are
+included here.
+
 USB supply mappings from static stock DT:
 PM660 L10 = 1.8 V; PM660L L1 = 0.88–0.9 V; PM660L L7 = 3.088–3.1 V.
 No parent-rail programming or guessed Xiaomi PHY trims are added.

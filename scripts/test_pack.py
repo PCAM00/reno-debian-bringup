@@ -18,6 +18,7 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual(fields,(len(kernel),0x8000,len(rd),0x1000000,0,0,0x100,PAGE,1,0))
         self.assertEqual(len(boot)%PAGE,0)
         self.assertEqual(boot[PAGE:PAGE+len(kernel)],kernel)
+        self.assertEqual(kernel[9],255)
         rd_start=PAGE+((len(kernel)+PAGE-1)//PAGE)*PAGE
         self.assertEqual(boot[rd_start:rd_start+len(rd)],rd)
         self.assertEqual(struct.unpack_from('<IQI',boot,1632),(0,0,1648))

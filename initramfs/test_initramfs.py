@@ -56,6 +56,9 @@ class Tests(unittest.TestCase):
             self.assertEqual(f[1], stat.S_IFCHR | 0o600)
             self.assertEqual(f[2:4], [0, 0])
             self.assertEqual(f[9:11], [5, 1])
+            null_fields, _ = entries['dev/null']
+            self.assertEqual(null_fields[1], stat.S_IFCHR | 0o666)
+            self.assertEqual(null_fields[9:11], [1, 3])
             if has_symlinks:
                 self.assertEqual(entries['bin/sh'][1], b'busybox')
             self.assertEqual(entries['init'][0][1], stat.S_IFREG | 0o755)

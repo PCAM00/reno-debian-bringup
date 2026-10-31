@@ -35,9 +35,11 @@ def archive(root, epoch, out):
             entry(name, stat.S_IFREG | (0o755 if executable else 0o644), path.read_bytes())
         else:
             raise ValueError(f'Unexpected input node: {name}')
-    if (root / 'dev/console').exists():
-        raise ValueError('console must be created by archive writer only')
+    for name in ('console', 'null'):
+        if (root / 'dev' / name).exists():
+            raise ValueError(f'{name} must be created by archive writer only')
     entry('dev/console', stat.S_IFCHR | 0o600, major=5, minor=1)
+    entry('dev/null', stat.S_IFCHR | 0o666, major=1, minor=3)
     entry('TRAILER!!!', 0)
 
 

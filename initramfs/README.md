@@ -50,8 +50,10 @@ packages, but this is not a snapshot-pinned historical reproducibility promise.
 Build in ARM64 ELF/script execution, gzip initramfs support, `CONFIG_BLOCK=n`,
 procfs, sysfs, devtmpfs, tmpfs, configfs, IPv4 networking, USB gadget/DWC3 device
 mode and configfs NCM + ACM; use built-ins, not modules. The image's executable
-`/init` and a `0600` character `/dev/console` (major 5, minor 1) are encoded by the
-unprivileged Python newc writer. No cpio executable, sudo or `mknod` is needed.
+`/init`, a `0600` character `/dev/console` (major 5, minor 1), and a `0666`
+`/dev/null` (major 1, minor 3) are encoded by the unprivileged Python newc writer.
+The latter is available before devtmpfs for the background timer and headless
+console fallback. No cpio executable, sudo or `mknod` is needed.
 The kernel/DTS must actually register a working UDC and USB PHY. Nothing here
 validates hardware bring-up, powers unsupported components, or installs a kernel.
 
