@@ -3,7 +3,9 @@
  * OPPO Reno PCAM00 / OP46B1 RAM-only bring-up, NOT a daily-use board port.
  * Derived from PCAM00 F.55 base DTB index 4 / DTBO entry 32, not a Xiaomi DTS.
  * Upstream SoC/PMIC definitions: 57UU/linux-sirius@17601ca5198a736f696447a9b6c568e4be97cc9c.
- * USB supply mapping and reservations are static evidence, not live verification.
+ * OPPO source audit: Reno-9.0-kernel-source@61711727601fe83c11947f308e9987aaf2217652.
+ * USB vendor parameters were cross-checked read-only on the F.55 phone.
+ * See docs/oppo-source-audit.md; none of this proves a mainline boot.
  */
 /dts-v1/;
 #include "sdm710.dtsi"
@@ -34,10 +36,12 @@
 			<0x1001b 0x202001a 0 0>;
 	oppo,prjversion = <1 18097>;
 
-	/* ABL must replace this with actual RAM topology before entry. */
-	memory@80000000 {
+	/* Match OPPO skeleton64.dtsi and live F.55 path exactly. ABL fills reg.
+	 * Do not guess RAM size or claim the new handoff is already tested.
+	 */
+	memory {
 		device_type = "memory";
-		reg = <0 0x80000000 0 0>;
+		reg = <0 0 0 0>;
 	};
 
 	chosen {
@@ -146,17 +150,40 @@
 &usb_1_dwc3 {
 	dr_mode = "peripheral";
 	maximum-speed = "high-speed";
+	/* Official pmic overlay uses HS + nop SS PHY, not an active QMP PHY. */
+	phys = <&usb_1_hsphy>;
+	phy-names = "usb2-phy";
 };
 &usb_1_hsphy {
 	status = "okay";
 	vdd-supply = <&vreg_l1b>;
 	vdda-pll-supply = <&vreg_l10a>;
 	vdda-phy-dpdm-supply = <&vreg_l7b>;
-	/* Leave SoC defaults/eFuse trim: do not copy Xiaomi USB PHY tuning. */
+	/* OPPO phy-msm-qusb-v2.c:640-650 overrides project 18097 TUNE1
+	 * to 0x77 and BIAS2 to 0x20. F.55 module parameters read 119/32.
+	 * 0x77 = HSTX 7 | half-bit BIT(2) | preemphasis 3.
+	 * Mainline applies nvmem AFTER DT overrides, unlike vendor code.
+	 * Remove only this PHY consumer: never read/write or alter eFuses.
+	 */
+	/delete-property/ nvmem-cells;
+	/delete-property/ nvmem-cell-names;
+	qcom,imp-res-offset-value = <8>;
+	qcom,bias-ctrl-value = <32>;
+	qcom,charge-ctrl-value = <0>;
+	qcom,hstx-trim-value = <QUSB2_V2_HSTX_TRIM_19_8_MA>;
+	qcom,preemphasis-level = <QUSB2_V2_PREEMPHASIS_15_PERCENT>;
+	qcom,preemphasis-width = <QUSB2_V2_PREEMPHASIS_WIDTH_HALF_BIT>;
+	qcom,hsdisc-trim-value = <1>;
 };
 
 /* Negative capability is deliberate. CONFIG_BLOCK=n is a second barrier. */
-&ufs_mem_hc { status = "disabled"; };
+&ufs_mem_hc {
+	/* OPPO sdm670.dtsi:2034 and live F.55 both specify one lane.
+	 * Supplies/reset/clock-list still need a separate storage bring-up.
+	 */
+	lanes-per-direction = <1>;
+	status = "disabled";
+};
 &ufs_mem_phy { status = "disabled"; };
 &sdhc_1 { status = "disabled"; };
 &sdhc_2 { status = "disabled"; };

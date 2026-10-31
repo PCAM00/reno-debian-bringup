@@ -35,6 +35,7 @@ class Tests(unittest.TestCase):
     def test_shell_syntax(self):
         subprocess.run(['bash', '-n', str(HERE / 'build.sh')], check=True)
         subprocess.run(['sh', '-n', str(HERE / 'init')], check=True)
+        subprocess.run(['sh', '-n', str(HERE / 'safety.sh')], check=True)
 
     def test_newc(self):
         with tempfile.TemporaryDirectory(prefix='.test-', dir=HERE) as tmp:
@@ -66,6 +67,33 @@ class Tests(unittest.TestCase):
             stream2 = io.BytesIO()
             mod.archive(root, 42, stream2)
             self.assertEqual(stream.getvalue(), stream2.getvalue())
+
+    def test_thermal_guard_fixtures(self):
+        # Only source the side-effect-free helper; never source /init.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zone = root / 'thermal_zone0'
+            zone.mkdir()
+            (zone / 'type').write_text('cpu-fixture\n')
+            output = root / 'result.txt'
+            def run(value, expected):
+                sysroot = root
+                if value is None:
+                    sysroot = root / 'no-zones'
+                    sysroot.mkdir()
+                else:
+                    (zone / 'temp').write_text(value)
+                result = subprocess.run(['sh', '-c', '. "$1"; thermal_snapshot "$2" "$3"',
+                                         'guard-test', str(HERE / 'safety.sh'), str(sysroot), str(output)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+            run('35000\n', 0)
+            run('69999\n', 0)
+            run('70000\n', 1)
+            run('999999999999999999999999\n', 2)
+            run('broken\n', 2)
+            run('-2147483648\n', 2)
+            run(None, 2)
 
     def test_ram_only_surface(self):
         text = (HERE / 'init').read_text()

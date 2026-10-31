@@ -40,6 +40,7 @@ jobs:
           sh -n initramfs/init
           python3 initramfs/test_initramfs.py
           python3 scripts/test_pack.py
+          python3 scripts/test_board.py
       - name: Compile Reno-only kernel and Debian diagnostic initramfs
         run: |
           set -euo pipefail

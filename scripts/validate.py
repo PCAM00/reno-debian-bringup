@@ -18,14 +18,16 @@ def require_config(path):
         "USB_CONFIGFS USB_CONFIGFS_NCM USB_CONFIGFS_ACM "
         "PHY_QCOM_QUSB2 SPMI_MSM_PMIC_ARB MFD_SPMI_PMIC "
         "REGULATOR_QCOM_RPMH QCOM_RPMH QCOM_COMMAND_DB QCOM_SMEM "
-        "ARCH_QCOM QCOM_SOC QCOM_RPMHPD QCOM_AOSS_QMP THERMAL_OF "
+        "QCOM_SOC QCOM_RPMHPD QCOM_AOSS_QMP THERMAL_OF "
+        "CPU_FREQ_DEFAULT_GOV_POWERSAVE CPU_FREQ_GOV_POWERSAVE CPU_FREQ_THERMAL "
+        "QCOM_TSENS QCOM_SPMI_TEMP_ALARM POWER_RESET_QCOM_PON TTY "
         "SDM_GCC_845 PINCTRL_SDM670 INTERCONNECT_QCOM_SDM670 ARM_SMMU"
     ).split()
     prohibited = (
         "BLOCK MODULES DEVMEM MTD MMC SCSI EFI EFIVAR_FS KEXEC "
         "PSTORE HIBERNATION REMOTEPROC DRM SOUND WLAN BT "
         "CHARGER_QCOM_SMB2 CHARGER_QCOM_SMBB BATTERY_QCOM_FG QCOM_RMTFS_MEM "
-        "TYPEC USB_CONFIGFS_MASS_STORAGE"
+        "TYPEC USB_CONFIGFS_MASS_STORAGE CPU_FREQ_DEFAULT_GOV_PERFORMANCE QCOM_LMH"
     ).split()
     errors = [f"CONFIG_{x} must be y (is {config.get('CONFIG_'+x, 'n')})"
               for x in required if config.get("CONFIG_"+x) != "y"]
@@ -67,12 +69,20 @@ def fdt_nodes(path):
 
 
 def require_dtb(path):
-    nodes=fdt_nodes(path)
+    return require_board_nodes(fdt_nodes(path))
+
+
+def require_board_nodes(nodes):
     root=nodes['/']
     if b'oppo,pcam00\0' not in root.get('compatible',b''):
         raise ValueError('Not a Reno DTB')
     if root.get('oppo,prjversion') != struct.pack('>II',1,18097):
         raise ValueError('Wrong OPPO project ID')
+    if root.get('qcom,board-id') != struct.pack('>II',8,0):
+        raise ValueError('Wrong OPPO board ID')
+    memory_nodes = [n for n,p in nodes.items() if p.get('device_type') == b'memory\0']
+    if memory_nodes != ['/memory'] or nodes['/memory'].get('reg') != bytes(16):
+        raise ValueError('Use original OPPO /memory zero-length placeholder; do not guess RAM')
     # stock reserved-memory union, checked for coverage and overlaps.
     expected=[(0x85700000,0x600000),(0x85e00000,0x100000),
               (0x85fc0000,0x4940000),(0x8ab00000,0x500000),
@@ -119,7 +129,22 @@ def require_dtb(path):
         raise ValueError('USB PHY is not enabled')
     if usb.get('dr_mode') != b'peripheral\0' or usb.get('maximum-speed') != b'high-speed\0':
         raise ValueError('Diagnostic USB must be USB2 device-only')
+    tuning = {'qcom,imp-res-offset-value': 8, 'qcom,bias-ctrl-value': 32,
+              'qcom,charge-ctrl-value': 0, 'qcom,hstx-trim-value': 7,
+              'qcom,preemphasis-level': 3, 'qcom,preemphasis-width': 1,
+              'qcom,hsdisc-trim-value': 1}
+    for prop, value in tuning.items():
+        if phy[0].get(prop) != struct.pack('>I', value):
+            raise ValueError(f'Wrong OPPO USB PHY tuning: {prop}')
+    if any(key in phy[0] for key in ('nvmem-cells', 'nvmem-cell-names')):
+        raise ValueError('nvmem would overwrite OPPO fixed HSTX after DT override')
+    ufs = [p for n,p in nodes.items() if n.endswith('/ufshc@1d84000')][0]
+    if ufs.get('lanes-per-direction') != struct.pack('>I', 1):
+        raise ValueError('Reno UFS is single lane; still must stay disabled')
     return {'model':root['model'].rstrip(b'\0').decode(),
+            'official_source_audit': '61711727601fe83c11947f308e9987aaf2217652',
+            'usb_tuning': tuning, 'usb_tune1_composed': '0x77',
+            'memory_placeholder_path': '/memory', 'ufs_lanes_disabled': 1,
             'usb2_phy_only': True,
             'reserved_spans':[{'start':hex(a),'end':hex(b),'node':n} for a,b,n in spans],
             'stock_reservations_covered':True,'disabled_nodes':list(disabled),

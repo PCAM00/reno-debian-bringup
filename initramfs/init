@@ -20,6 +20,32 @@ mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev || idle
 mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /run || idle
 mount -t tmpfs -o nosuid,nodev,noexec,size=2m,mode=1777 tmpfs /tmp || idle
 mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /www || idle
+. /etc/ramdiag-safety.sh
+# Give built-in TSENS/PMIC drivers up to 10 seconds to publish real readings.
+thermal_ready=0
+for attempt in 1 2 3 4 5; do
+    thermal_snapshot /sys/class/thermal /run/thermal.txt
+    thermal_result=$?
+    if [ "$thermal_result" -eq 0 ]; then thermal_ready=1; break; fi
+    [ "$thermal_result" -eq 1 ] && break
+    sleep 2
+done
+if [ "$thermal_ready" -ne 1 ]; then
+    cat /run/thermal.txt
+    echo 'No verified cool readings: abort RAM diagnostics with ordinary reboot'
+    reboot -f
+    idle
+fi
+(
+    while :; do
+        sleep 5
+        if ! thermal_snapshot /sys/class/thermal /run/thermal-current.txt; then
+            echo 'Thermal diagnostic guard stopped the test; this is not a charger driver'
+            reboot -f
+            idle
+        fi
+    done
+) &
 mkdir -p /sys/kernel/config
 mount -t configfs -o nosuid,nodev,noexec configfs /sys/kernel/config || idle
 # All configuration writes below address RAM-backed USB configfs, not storage.
@@ -39,7 +65,8 @@ mount -t configfs -o nosuid,nodev,noexec configfs /sys/kernel/config || idle
     echo Experimental > "$g/strings/0x409/manufacturer"
     echo 'Debian-sourced RAM diagnostics' > "$g/strings/0x409/product"
     echo 'NCM + ACM (no shell)' > "$g/configs/c.1/strings/0x409/configuration"
-    echo 250 > "$g/configs/c.1/MaxPower"
+    # Descriptor mA only: NOT a hardware input-current or charge limit.
+    echo 100 > "$g/configs/c.1/MaxPower"
     mkdir -p "$g/functions/ncm.usb0" "$g/functions/acm.usb0"
     echo 02:00:00:07:00:02 > "$g/functions/ncm.usb0/dev_addr"
     echo 02:00:00:07:00:01 > "$g/functions/ncm.usb0/host_addr"
@@ -74,6 +101,15 @@ cat /run/usb-setup.log
     echo 'Static boot snapshot; GET-only files, no CGI, no shell, no internal mounts.'
     echo 'Files: /status.txt /dmesg.txt /os-release /packages.txt'
     cat /run/usb-setup.log
+    echo '--- initial thermal readings (not battery safety) ---'
+    cat /run/thermal.txt
+    echo '--- actual CPU policy ---'
+    for governor in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
+        if [ -r "$governor" ]; then
+            printf '%s: ' "$governor"
+            cat "$governor"
+        fi
+    done
     cat /proc/uptime /proc/meminfo
     ip addr show
 } > /www/status.txt

@@ -1,0 +1,248 @@
+{
+  "purpose": "Audited upstream evidence; no private device data",
+  "files": [
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "Makefile",
+      "bytes": 64928,
+      "sha256": "c14aed6f4d95370671546669826db4e4ba828820bcf319ab50010ff467112141",
+      "git_blob": "fb649d8e5363f6a326c160803d6ad252247180c7",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/Makefile"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "AndroidKernel.mk",
+      "bytes": 7405,
+      "sha256": "c15b1ed152c74a5d42e8878745b71c38643cfe26ff7e2488847ae1917a0bd27f",
+      "git_blob": "2a8d506597846389e38795c6ee1d2982d4bac0e0",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/AndroidKernel.mk"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/skeleton64.dtsi",
+      "bytes": 345,
+      "sha256": "3a9772ea40d5f0b3b59837158e81fad50d549644c2589dab74779186b23d481f",
+      "git_blob": "1f8ba28132c4a196b6351f99b16fe92593732717",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/skeleton64.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm710-pm660a-mtp-overlay.dts",
+      "bytes": 1414,
+      "sha256": "d90f2e41e23629e716803e007ec0b009426ecca0f496cf23a33df3e18348465f",
+      "git_blob": "42d50a02ebc0a29a789aeed23a07847edd32fb8f",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm710-pm660a-mtp-overlay.dts"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670.dtsi",
+      "bytes": 81017,
+      "sha256": "48010fa06cc74f1b2c467071252f220d3aed3cb175b30b8328b68ccd8ff14328",
+      "git_blob": "630a988a0d7b24955872fcd5939f0143f0f21c4f",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670-mtp.dtsi",
+      "bytes": 28246,
+      "sha256": "02a22c4f6d174b2c75b28b916402c611ad41c64f8d4096bf21d9a295121df62d",
+      "git_blob": "10e1a7770d369d8b775d2dc07056fd186e6502cf",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670-mtp.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670-usb.dtsi",
+      "bytes": 2702,
+      "sha256": "b5413252d961da847d7ba971dde08da041a37118124abec8773f11a499e7d58b",
+      "git_blob": "1e84e2c34bc40032465858f598152dafb109e10c",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670-usb.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670-pmic-overlay.dtsi",
+      "bytes": 17498,
+      "sha256": "458ce903c71665a60f9ac7fd6cbc4a0c553ae8bdf7f587f9c6e7a91224d5965e",
+      "git_blob": "e72a03e500f48dd77b923a8dfc76d83d92e46f76",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670-pmic-overlay.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670-regulator.dtsi",
+      "bytes": 20541,
+      "sha256": "544c67f5d1d5a65d859c5fed89f569f4f2467ac86c54442f5f4d5395361a8576",
+      "git_blob": "3efadcba9710b7dadc0674540f2bb5770d5914a8",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670-regulator.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/sdm670-thermal.dtsi",
+      "bytes": 16180,
+      "sha256": "988cee8602e53cd36e81fd2b249923a238a2d31d071b8fe8879fad3b6edc52d8",
+      "git_blob": "a448732a40c3819fe709e59e959f072837ed3ef6",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/sdm670-thermal.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "arch/arm64/boot/dts/18097/dsi-panel_oppo18081samsung_ams641rw01_1080_2340.dtsi",
+      "bytes": 11756,
+      "sha256": "9dfed3e7a3897bef682201fb1554d2b5f66d673a0f36781fa5c5d35d2454cb4d",
+      "git_blob": "8ddb6354d9f446ae95541eb2781df2b78b2a0e1b",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/arch/arm64/boot/dts/18097/dsi-panel_oppo18081samsung_ams641rw01_1080_2340.dtsi"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/usb/phy/phy-msm-qusb-v2.c",
+      "bytes": 37188,
+      "sha256": "fc249d7d1b377fa43ae4b0f5ab5ff6abf132cd353613c55035b6c1d6de17a2d4",
+      "git_blob": "4c2217c02897984465a54ccdf231db0407657462",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/usb/phy/phy-msm-qusb-v2.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/usb/dwc3/dwc3-msm.c",
+      "bytes": 138210,
+      "sha256": "cbd9d26c2fb1d9ab708cc0236e3bb563530f8b7acb6feb562fa4b42b9b4bc40c",
+      "git_blob": "a32e8bf6ee85108fd3cb1c0990305555a07b5ae3",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/usb/dwc3/dwc3-msm.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/input/touchscreen/oppo_touchscreen/Synaptics/S3706/synaptics_drivers_s3706.c",
+      "bytes": 238354,
+      "sha256": "46726faa10d08e4033270387d16e5a43e51bcc33651e37724c794992b6010458",
+      "git_blob": "35ad7d55547d738a12552393dba091f92c3fdd14",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/oppo_touchscreen/Synaptics/S3706/synaptics_drivers_s3706.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/input/touchscreen/oppo_touchscreen/touchpanel_common_driver.c",
+      "bytes": 155097,
+      "sha256": "9f6bdf201853b6988382ab86a64021558fcdefc5d240497a3c628fb11aaf2d07",
+      "git_blob": "975c573307ad7cb3307602ead5eab8bf1674ca73",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/oppo_touchscreen/touchpanel_common_driver.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/gpu/drm/msm/dsi-staging/dsi_display.c",
+      "bytes": 178902,
+      "sha256": "a354365c70467b9f563bb402a4e5a9b1c9bf3ce1c600d1758891ef27a894dfc3",
+      "git_blob": "94eedfafedd03ccb3c545407c322c82bb61a73f4",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/gpu/drm/msm/dsi-staging/dsi_display.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/gpu/drm/msm/dsi-staging/dsi_panel.c",
+      "bytes": 101231,
+      "sha256": "1308ef162436408a9e499da3f1110b8e845d4c7b7fb32fb69c91a13c200b69f6",
+      "git_blob": "922beb7640c0bca9f08bb87eff8e58f322de9b25",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/gpu/drm/msm/dsi-staging/dsi_panel.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/power/oppo/oppo_charger.c",
+      "bytes": 129026,
+      "sha256": "21779c27d9e5788186e3d639471bb93082266add2ab3aeb48e7a1d4fa54f67fb",
+      "git_blob": "fa16c74da4632ff43d35af90bdaac79aa9e5c42c",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/power/oppo/oppo_charger.c"
+    },
+    {
+      "repo": "oppo-source/Reno-9.0-kernel-source",
+      "commit": "61711727601fe83c11947f308e9987aaf2217652",
+      "path": "drivers/power/oppo/charger_ic/oppo_battery_sdm670P.c",
+      "bytes": 308182,
+      "sha256": "f3fc45b39e9d7f8cdf19c46413c6cc9c1d93c81e5a21658d39ce774562e762ef",
+      "git_blob": "002e57d892f483c9b2afa449a54cf8eb4eaa3c2f",
+      "url": "https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/power/oppo/charger_ic/oppo_battery_sdm670P.c"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "arch/arm64/boot/dts/qcom/sdm670.dtsi",
+      "bytes": 100295,
+      "sha256": "76aa57bc3d8857b3129b976d601b8d08065d85a06e2963f295d9f53bbc705791",
+      "git_blob": "4eef5bc46e826d7d3a291dbb4b7abe0cb115fc19",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/arch/arm64/boot/dts/qcom/sdm670.dtsi"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "arch/arm64/boot/dts/qcom/sdm710.dtsi",
+      "bytes": 5121,
+      "sha256": "2a8c277497433605b297b0a049d762bea31f61f29dfaf6021212140ae5a97797",
+      "git_blob": "5095cd890dac3fb1f68e108bb1a25b3ce737f608",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/arch/arm64/boot/dts/qcom/sdm710.dtsi"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "drivers/phy/qualcomm/phy-qcom-qusb2.c",
+      "bytes": 31899,
+      "sha256": "4e0c7eae5f524dc5393bc017f5b38c47126924fccef7e39609788823faf8c825",
+      "git_blob": "eb93015be841f5b85ddb345010fb12756e225d45",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/drivers/phy/qualcomm/phy-qcom-qusb2.c"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "Documentation/devicetree/bindings/phy/qcom,qusb2-phy.yaml",
+      "bytes": 5617,
+      "sha256": "d6bf06f55f8482197230c2ec5bd5bf3242114a0e2d5e610463d786827c1fc15e",
+      "git_blob": "449c2a7e5fecf7ddc344a64a8742aeb5f339ccbb",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/Documentation/devicetree/bindings/phy/qcom,qusb2-phy.yaml"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "include/dt-bindings/phy/phy-qcom-qusb2.h",
+      "bytes": 1217,
+      "sha256": "cc3479acd0297ab1014064320d3cf3ae8314c996e73a066bf1ec75fe6766e320",
+      "git_blob": "5c5e4d800cacca2a09a1fd4aac7b31e2586ffe82",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/include/dt-bindings/phy/phy-qcom-qusb2.h"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "drivers/usb/dwc3/dwc3-qcom-legacy.c",
+      "bytes": 22722,
+      "sha256": "155d7937357339bf4dc1bcf36f8cf7b47b13c268946412a6f2c077066baa0e41",
+      "git_blob": "d3fad0fcfdac33ffbd75933f4803a023423bc4f4",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/drivers/usb/dwc3/dwc3-qcom-legacy.c"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "drivers/usb/dwc3/Makefile",
+      "bytes": 1947,
+      "sha256": "97aa5151306df6f9e81f2988843f1548fd0928c99c097e48179892524f99d2cb",
+      "git_blob": "f37971197203e1379d554da9d60860360ea9c3fe",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/drivers/usb/dwc3/Makefile"
+    },
+    {
+      "repo": "57UU/linux-sirius",
+      "commit": "17601ca5198a736f696447a9b6c568e4be97cc9c",
+      "path": "drivers/thermal/qcom/lmh.c",
+      "bytes": 7199,
+      "sha256": "a4e4e3755af42cd05be37307e80fdea18a00cc680749d0aa7484f5570ec50775",
+      "git_blob": "81ab2f0be9c8e5f50bf3ee33013e5bd7eac3a78c",
+      "url": "https://github.com/57UU/linux-sirius/blob/17601ca5198a736f696447a9b6c568e4be97cc9c/drivers/thermal/qcom/lmh.c"
+    }
+  ]
+}

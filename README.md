@@ -10,6 +10,18 @@ from authenticated Debian trixie packages (`busybox-static` and `base-files`).
 No Android, chroot, proot, LXC or VM is needed for the intended native boot.
 However, no successful Reno boot is claimed by a successful CI build.
 
+## Official OPPO-source revision
+
+The official Android 9 / Linux 4.9.112 release was actually inspected at commit
+`61711727601fe83c11947f308e9987aaf2217652`, then cross-checked with F.55 evidence.
+See [source audit](docs/oppo-source-audit.md) for exact source lines and limitations.
+
+This revision sets Reno USB PHY TUNE1=0x77 / BIAS2=0x20 through mainline field
+properties, avoids the later nvmem override, restores the original `/memory`
+placeholder, records disabled single-lane UFS, defaults CPU policy to powersave,
+and adds a read-only thermal diagnostic stop condition. It still does **not**
+implement full charging, display, touch or a complete Debian root filesystem.
+
 ## Intended first milestone
 
 * Native kernel reaches `/init` in RAM.
@@ -35,8 +47,9 @@ However, no successful Reno boot is claimed by a successful CI build.
 * USB gadget controller/PHY and three evidenced USB supplies are enabled.
   RPMh/clock/IOMMU/PMIC handling still touches hardware: **RAM-only does not mean
   electrically risk-free, guaranteed recovery, or safe charging**.
-* PMIC/SoC temperature support is requested, but battery thermal management
-  and runtime functionality are not verified. Short, attended tests only.
+* PMIC/SoC temperature support is requested. Missing readings or a 70°C
+  diagnostic threshold trigger a best-effort ordinary reboot. This is not a
+  battery temperature limit or charging protection. Short, attended tests only.
 
 ## Source and evidence
 

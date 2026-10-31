@@ -20,6 +20,7 @@ python3 "$HERE/scripts/validate.py" --config "$KERNEL_OUT/.config"
 make -C "$KERNEL_DIR" O="$KERNEL_OUT" -j"$(nproc)" Image qcom/sdm710-oppo-pcam00-ramdiag.dtb
 DTB="$KERNEL_OUT/arch/arm64/boot/dts/qcom/sdm710-oppo-pcam00-ramdiag.dtb"
 python3 "$HERE/scripts/validate.py" --config "$KERNEL_OUT/.config" --dtb "$DTB" --output "$OUT_DIR/validation.json"
+TEST_CONFIG="$KERNEL_OUT/.config" TEST_DTB="$DTB" python3 "$HERE/scripts/test_board.py"
 cp "$KERNEL_OUT/arch/arm64/boot/Image" "$OUT_DIR/Image"
 cp "$DTB" "$OUT_DIR/sdm710-oppo-pcam00-ramdiag.dtb"
 cp "$HERE/dts/sdm710-oppo-pcam00-ramdiag.dts" "$OUT_DIR/"
@@ -29,6 +30,8 @@ VERIFY_APPLETS=required OUT_DIR="$OUT_DIR" bash "$HERE/initramfs/build.sh"
 python3 "$HERE/scripts/pack_boot.py" --image "$OUT_DIR/Image" --dtb "$DTB" \
   --ramdisk "$OUT_DIR/initramfs-debian-arm64.cpio.gz" --output "$OUT_DIR/boot-pcam00-ramdiag-UNTESTED.img"
 cp "$HERE/README.md" "$OUT_DIR/README.md"
+mkdir -p "$OUT_DIR/source-audit"
+cp "$HERE/docs/oppo-source-audit.md" "$HERE/docs/oppo-source-files.json" "$OUT_DIR/source-audit/"
 python3 - "$OUT_DIR" "$KERNEL_DIR" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 out,kernel=map(pathlib.Path,sys.argv[1:])

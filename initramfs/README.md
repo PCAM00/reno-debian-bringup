@@ -77,6 +77,15 @@ present. Logs are an initial snapshot, not live streaming. This diagnostic
 endpoint is not encrypted/authenticated: connect only to a trusted USB host.
 ACM enumerates for driver testing only; no serial shell/input service is started.
 
+The official-source revision includes `/etc/ramdiag-safety.sh`. It reads only
+thermal sysfs values, allows up to 10 seconds for valid readings, and requests
+an ordinary reboot if readings are missing or any zone reaches 70000 m°C.
+This is a conservative **SoC/PMIC diagnostic** threshold, not a battery/skin
+safety threshold or charger policy. It never changes thermal trip registers,
+charger settings or CPU frequency sysfs values. CPU powersave is selected by
+the kernel configuration. Tests exercise only temporary fake sysfs fixtures.
+The USB MaxPower descriptor is 100 mA; it is not a hardware charging limit.
+
 The default independent 180-second timer runs `reboot -f` (ordinary kernel
 reboot, no bootloader argument or misc write). This is a best-effort recovery
 convenience, **not a safety guarantee**: a kernel hang or missing reboot driver
