@@ -1,0 +1,55 @@
+name: Reno PCAM00 RAM-only Debian diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: reno-ramdiag-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout reviewed build scripts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install cross-compilation and verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make bc bison flex \
+            libssl-dev libelf-dev device-tree-compiler python3 git xz-utils \
+            qemu-user debian-archive-keyring gpgv ca-certificates gzip
+      - name: Fetch immutable SDM670/710 source revision
+        env:
+          KERNEL_COMMIT: 17601ca5198a736f696447a9b6c568e4be97cc9c
+        run: |
+          git init "$RUNNER_TEMP/linux"
+          git -C "$RUNNER_TEMP/linux" remote add origin https://github.com/57UU/linux-sirius.git
+          git -C "$RUNNER_TEMP/linux" fetch --depth=1 origin "$KERNEL_COMMIT"
+          git -C "$RUNNER_TEMP/linux" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/linux" rev-parse HEAD)" = "$KERNEL_COMMIT"
+      - name: Test local packers and initramfs safeguards
+        run: |
+          bash -n scripts/build.sh initramfs/build.sh
+          sh -n initramfs/init
+          python3 initramfs/test_initramfs.py
+          python3 scripts/test_pack.py
+      - name: Compile Reno-only kernel and Debian diagnostic initramfs
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          KERNEL_DIR="$RUNNER_TEMP/linux" KERNEL_OUT="$RUNNER_TEMP/kernel-out" \
+            OUT_DIR="$GITHUB_WORKSPACE/artifacts" bash scripts/build.sh 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+      - name: Save successful outputs or useful failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pcam00-ramdiag-${{ github.run_number }}
+          path: |
+            artifacts/
+            build.log
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 1

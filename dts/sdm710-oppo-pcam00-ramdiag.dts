@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * OPPO Reno PCAM00 / OP46B1 RAM-only bring-up, NOT a daily-use board port.
+ * Derived from PCAM00 F.55 base DTB index 4 / DTBO entry 32, not a Xiaomi DTS.
+ * Upstream SoC/PMIC definitions: 57UU/linux-sirius@17601ca5198a736f696447a9b6c568e4be97cc9c.
+ * USB supply mapping and reservations are static evidence, not live verification.
+ */
+/dts-v1/;
+#include "sdm710.dtsi"
+#include "pm660.dtsi"
+#include "pm660l.dtsi"
+
+/* Preserve SMEM and CMD-DB windows, but do not expose an RMTFS driver. */
+/delete-node/ &rmtfs_mem;
+/delete-node/ &venus_mem;
+/delete-node/ &wlan_msa_mem;
+/delete-node/ &cdsp_mem;
+/delete-node/ &mba_region;
+/delete-node/ &adsp_mem;
+/delete-node/ &ipa_fw_mem;
+/delete-node/ &ipa_gsi_mem;
+/delete-node/ &gpu_mem;
+/* The inherited SPSS address is covered by Reno's larger ADSP reservation. */
+/delete-node/ &spss_mem;
+
+/ {
+	model = "OPPO Reno PCAM00 (OP46B1) experimental RAM diagnostics";
+	compatible = "oppo,pcam00", "qcom,sdm710", "qcom,sdm670";
+	chassis-type = "handset";
+	qcom,msm-id = <360 0 393 0>;
+	qcom,board-id = <8 0>;
+	qcom,pmic-id = <0x1001b 0x1011a 0 0>,
+			<0x1001b 0x2001a 0 0>,
+			<0x1001b 0x202001a 0 0>;
+	oppo,prjversion = <1 18097>;
+
+	/* ABL must replace this with actual RAM topology before entry. */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0 0x80000000 0 0>;
+	};
+
+	chosen {
+		/* No guessed UART pins, framebuffer address, root=, or Android init. */
+		bootargs = "rdinit=/init loglevel=7 ignore_loglevel printk.time=1 panic=15 clk_ignore_unused pd_ignore_unused";
+	};
+
+	reserved-memory {
+		/* New node names match their addresses (unlike overriding reg alone). */
+		venus_mem: venus@94600000 {
+			reg = <0 0x94600000 0 0x500000>;
+			no-map;
+		};
+		wlan_msa_mem: wlan-msa@94b00000 {
+			reg = <0 0x94b00000 0 0x100000>;
+			no-map;
+		};
+		cdsp_mem: cdsp@94c00000 {
+			reg = <0 0x94c00000 0 0x1e00000>;
+			no-map;
+		};
+		mba_region: mba@96a00000 {
+			reg = <0 0x96a00000 0 0x200000>;
+			no-map;
+		};
+		adsp_mem: adsp@96c00000 {
+			reg = <0 0x96c00000 0 0x1e00000>;
+			no-map;
+		};
+		ipa_fw_mem: ipa-fw@98a00000 {
+			reg = <0 0x98a00000 0 0x10000>;
+			no-map;
+		};
+		ipa_gsi_mem: ipa-gsi@98a10000 {
+			reg = <0 0x98a10000 0 0x5000>;
+			no-map;
+		};
+		gpu_mem: gpu@98a15000 {
+			reg = <0 0x98a15000 0 0x2000>;
+			no-map;
+		};
+		/* Reserve splash without probing unknown display/scanout state. */
+		framebuffer@9c000000 {
+			reg = <0 0x9c000000 0 0x2300000>;
+			no-map;
+		};
+		dfps@9e300000 {
+			reg = <0 0x9e300000 0 0x100000>;
+			no-map;
+		};
+		secure-dsp@a7800000 {
+			reg = <0 0xa7800000 0 0xc00000>;
+			no-map;
+		};
+		/* Preserve existing crash/log memory; intentionally no ramoops driver. */
+		crash-log@b7e00000 {
+			reg = <0 0xb7e00000 0 0x400000>;
+			no-map;
+		};
+		xbl-log@b8200000 {
+			reg = <0 0xb8200000 0 0x100000>;
+			no-map;
+		};
+	};
+};
+
+/* Complete the stock removed region [85fc0000,8a900000) without overlap.
+ * aop, command-db and smem already cover [85fc0000,86200000).
+ */
+&tz_mem { reg = <0 0x86200000 0 0x4700000>; };
+&mpss_region { reg = <0 0x8b000000 0 0x9600000>; };
+
+/* Only explicitly required USB supplies. No battery/charger/VOOC programming.
+ * Parent power rails are left at firmware-provided settings in this milestone.
+ */
+&apps_rsc {
+	regulators-0 {
+		compatible = "qcom,pm660-rpmh-regulators";
+		qcom,pmic-id = "a";
+		vreg_l10a: ldo10 {
+			regulator-name = "pcam00-usb-pll-1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+	};
+	regulators-1 {
+		compatible = "qcom,pm660l-rpmh-regulators";
+		qcom,pmic-id = "b";
+		vreg_l1b: ldo1 {
+			regulator-name = "pcam00-usb-core";
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <900000>;
+		};
+		vreg_l7b: ldo7 {
+			regulator-name = "pcam00-usb-dpdm";
+			regulator-min-microvolt = <3088000>;
+			regulator-max-microvolt = <3100000>;
+		};
+	};
+};
+
+&usb_1 {
+	status = "okay";
+	qcom,select-utmi-as-pipe-clk;
+};
+&usb_1_dwc3 {
+	dr_mode = "peripheral";
+	maximum-speed = "high-speed";
+};
+&usb_1_hsphy {
+	status = "okay";
+	vdd-supply = <&vreg_l1b>;
+	vdda-pll-supply = <&vreg_l10a>;
+	vdda-phy-dpdm-supply = <&vreg_l7b>;
+	/* Leave SoC defaults/eFuse trim: do not copy Xiaomi USB PHY tuning. */
+};
+
+/* Negative capability is deliberate. CONFIG_BLOCK=n is a second barrier. */
+&ufs_mem_hc { status = "disabled"; };
+&ufs_mem_phy { status = "disabled"; };
+&sdhc_1 { status = "disabled"; };
+&sdhc_2 { status = "disabled"; };
+&mdss { status = "disabled"; };
+&mdss_dsi0 { status = "disabled"; };
+&mdss_dsi1 { status = "disabled"; };
+&gpu { status = "disabled"; };
+&gmu { status = "disabled"; };
+&camss { status = "disabled"; };
+&cci { status = "disabled"; };
+&venus { status = "disabled"; };
+&mss_pil { status = "disabled"; };
+&adsp_pas { status = "disabled"; };
+&cdsp_pas { status = "disabled"; };
+&ipa { status = "disabled"; };
+&qupv3_id_0 { status = "disabled"; };
+&qupv3_id_1 { status = "disabled"; };
+&pm660_charger { status = "disabled"; };
+&pm660_typec { status = "disabled"; };
+&pm660_fg { status = "disabled"; };
+&pm660_haptics { status = "disabled"; };
+&pm660_spmi_regulators { status = "disabled"; };
+&pm660l_spmi_regulators { status = "disabled"; };
+&pon_pwrkey { status = "okay"; };

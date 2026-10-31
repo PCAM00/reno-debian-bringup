@@ -1,0 +1,12 @@
+artifacts/
+build.log
+__pycache__/
+*.pyc
+*.img
+*.zip
+*.tar*
+*.cpio*
+.env
+*token*
+*credential*
+*known_hosts*

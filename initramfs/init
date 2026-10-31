@@ -1,0 +1,86 @@
+#!/bin/sh
+# PID 1: diagnostic appliance, deliberately no interactive recovery shell.
+export PATH=/bin
+umask 022
+exec </dev/console >/dev/console 2>&1
+echo 'Debian-sourced RAM-only diagnostics (not installed Debian)'
+seconds=$(cat /etc/recovery-seconds)
+if [ "$seconds" -gt 0 ]; then
+    ( sleep "$seconds"; echo 'Recovery timer: ordinary forced reboot'; reboot -f ) &
+fi
+idle() { while :; do sleep 3600; done; }
+mount -t proc -o nosuid,nodev,noexec proc /proc || idle
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys || idle
+mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev || idle
+mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /run || idle
+mount -t tmpfs -o nosuid,nodev,noexec,size=2m,mode=1777 tmpfs /tmp || idle
+mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /www || idle
+mkdir -p /sys/kernel/config
+mount -t configfs -o nosuid,nodev,noexec configfs /sys/kernel/config || idle
+# All configuration writes below address RAM-backed USB configfs, not storage.
+(
+    set -e
+    g=/sys/kernel/config/usb_gadget/reno_diag
+    mkdir -p "$g"
+    echo 0x1d6b > "$g/idVendor"
+    echo 0x0104 > "$g/idProduct"
+    echo 0x0200 > "$g/bcdUSB"
+    echo 0x0100 > "$g/bcdDevice"
+    echo 0xef > "$g/bDeviceClass"
+    echo 0x02 > "$g/bDeviceSubClass"
+    echo 0x01 > "$g/bDeviceProtocol"
+    mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409"
+    echo reno-ram-diag > "$g/strings/0x409/serialnumber"
+    echo Experimental > "$g/strings/0x409/manufacturer"
+    echo 'Debian-sourced RAM diagnostics' > "$g/strings/0x409/product"
+    echo 'NCM + ACM (no shell)' > "$g/configs/c.1/strings/0x409/configuration"
+    echo 250 > "$g/configs/c.1/MaxPower"
+    mkdir -p "$g/functions/ncm.usb0" "$g/functions/acm.usb0"
+    echo 02:00:00:07:00:02 > "$g/functions/ncm.usb0/dev_addr"
+    echo 02:00:00:07:00:01 > "$g/functions/ncm.usb0/host_addr"
+    ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm.usb0"
+    ln -s "$g/functions/acm.usb0" "$g/configs/c.1/acm.usb0"
+    udc=
+    count=0
+    while [ "$count" -lt 40 ]; do
+        for candidate in /sys/class/udc/*; do
+            [ -e "$candidate" ] || continue
+            udc=${candidate##*/}
+            break
+        done
+        [ -z "$udc" ] || break
+        sleep 1
+        count=$((count + 1))
+    done
+    [ -n "$udc" ] || { echo 'ERROR: no USB device controller after 40s'; exit 1; }
+    echo "$udc" > "$g/UDC"
+    iface=$(cat "$g/functions/ncm.usb0/ifname")
+    ip link set lo up
+    ip addr add 192.168.7.2/30 dev "$iface"
+    ip link set "$iface" up
+    echo "UDC=$udc interface=$iface phone=192.168.7.2/30"
+    echo 'ACM enumerated only; no getty, command interpreter, or input reader.'
+) > /run/usb-setup.log 2>&1
+usb_result=$?
+cat /run/usb-setup.log
+{
+    echo 'Debian-sourced minimal diagnostics; NOT installed Debian or a desktop.'
+    echo "USB setup exit=$usb_result; recovery timer=${seconds}s (0=disabled)."
+    echo 'Static boot snapshot; GET-only files, no CGI, no shell, no internal mounts.'
+    echo 'Files: /status.txt /dmesg.txt /os-release /packages.txt'
+    cat /run/usb-setup.log
+    cat /proc/uptime /proc/meminfo
+    ip addr show
+} > /www/status.txt
+cat /www/status.txt > /www/index.html
+dmesg > /www/dmesg.txt 2>&1
+cat /etc/os-release > /www/os-release
+cat /etc/package-provenance.txt > /www/packages.txt
+# No files, symlinks, scripts, upload endpoints, or CGI in this docroot.
+chmod 0444 /www/*
+mount -t tmpfs -o remount,ro,nosuid,nodev,noexec tmpfs /www || idle
+if [ "$usb_result" -eq 0 ]; then
+    httpd -f -p 192.168.7.2:8080 -h /www -c /etc/httpd.conf -u 65534:65534 &
+    echo 'Read-only diagnostics: http://192.168.7.2:8080/ (USB host .1 only)'
+fi
+idle
