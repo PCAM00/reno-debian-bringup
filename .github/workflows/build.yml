@@ -9,6 +9,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 75
     steps:
       - name: Checkout reviewed build scripts
@@ -39,9 +42,13 @@ jobs:
           python3 scripts/test_pack.py
       - name: Compile Reno-only kernel and Debian diagnostic initramfs
         run: |
+          set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
           KERNEL_DIR="$RUNNER_TEMP/linux" KERNEL_OUT="$RUNNER_TEMP/kernel-out" \
             OUT_DIR="$GITHUB_WORKSPACE/artifacts" bash scripts/build.sh 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          test -s artifacts/Image
+          test -s artifacts/boot-pcam00-ramdiag-UNTESTED.img
+          test -s artifacts/validation.json
       - name: Save successful outputs or useful failure evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

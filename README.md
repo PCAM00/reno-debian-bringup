@@ -27,6 +27,8 @@ However, no successful Reno boot is claimed by a successful CI build.
   AVB edits, modem calibration, Wi-Fi NVM patches or partition-writing commands.
 * No loadable modules, `/dev/mem`, EFI variables, remoteproc, display, GPU,
   touch, sound, Wi-Fi, Bluetooth, battery charging policy or Type-C/PD driver.
+  The generic power-supply framework is enabled as a USB PHY dependency, but
+  no charger/battery hardware driver is enabled.
 * Stock F.55 static reserved memory ranges are preserved; assertions check
   coverage and overlap. AOP/CMD-DB/SMEM subranges follow SoC definitions and
   remain a live-hardware verification item.
