@@ -8,6 +8,7 @@ boots on a phone.
 import argparse
 import json
 import re
+import struct
 import sys
 
 REQUIRED_ON = {
@@ -66,6 +67,10 @@ FORBIDDEN_ON = {
 }
 
 # Substrings that must not occur in the built binary.
+# NOTE: the ELF symbol/string tables legitimately contain names such as
+# FASTBOOT_UDP (a networking environment variable) even when the fastboot
+# subsystem is not built.  That is why the ELF is scanned over its PT_LOAD
+# segments only - those are exactly the bytes that get loaded into memory.
 BINARY_FATAL = (b'saveenv', b'fastboot')
 BINARY_WARN = (b'bootloader control block', b'dfu', b'eraseblk', b'gpt')
 
@@ -127,20 +132,55 @@ def audit(cfg):
     return errors, notes
 
 
-def scan_binary(path, label, errors, notes, warnings):
+def elf_load_ranges(data):
+    """Return the (start, end) file ranges of PT_LOAD segments of an ELF64 file.
+
+    Returns None when the data is not a little/big-endian ELF64 image.
+    """
+    if len(data) < 64 or data[:4] != b'\x7fELF' or data[4] != 2:
+        return None
+    endian = '<' if data[5] == 1 else '>'
+    e_phoff, = struct.unpack_from(endian + 'Q', data, 0x20)
+    e_phentsize, e_phnum = struct.unpack_from(endian + 'HH', data, 0x36)
+    if not e_phoff or not e_phnum or e_phentsize < 56:
+        return None
+    ranges = []
+    for index in range(e_phnum):
+        off = e_phoff + index * e_phentsize
+        if off + 56 > len(data):
+            break
+        p_type, = struct.unpack_from(endian + 'I', data, off)
+        p_offset, = struct.unpack_from(endian + 'Q', data, off + 8)
+        p_filesz, = struct.unpack_from(endian + 'Q', data, off + 32)
+        if p_type == 1 and p_filesz and p_offset + p_filesz <= len(data):
+            ranges.append((p_offset, p_offset + p_filesz))
+    return ranges or None
+
+
+def scan_binary(path, label, errors, notes, warnings, load_only=False):
     with open(path, 'rb') as fh:
         data = fh.read()
     if len(data) < 4096:
         errors.append(f'{label} is only {len(data)} bytes')
         return
-    low = data.lower()
+    if load_only:
+        ranges = elf_load_ranges(data)
+        if not ranges:
+            errors.append(f'{label}: cannot determine ELF load segments; refusing to guess')
+            return
+        payload = b''.join(data[start:end] for start, end in ranges)
+        notes.append(f'{label}: {len(ranges)} PT_LOAD segment(s), '
+                     f'{len(payload)} of {len(data)} bytes are loaded')
+    else:
+        payload = data
+    low = payload.lower()
     for needle in BINARY_FATAL:
         if needle in low:
             errors.append(f'{label} contains forbidden string {needle!r}')
     for needle in BINARY_WARN:
         if needle in low:
-            warnings.append(f'{label} contains {needle!r}; review before trusting it')
-    notes.append(f'{label}: {len(data)} bytes scanned')
+            warnings.append(f'{label} loaded image contains {needle!r}; review it')
+    notes.append(f'{label}: {len(payload)} bytes scanned')
 
 
 def main():
@@ -154,9 +194,10 @@ def main():
     cfg = parse_config(args.config)
     errors, notes = audit(cfg)
     warnings = []
-    for path, label in ((args.elf, 'u-boot.elf'), (args.bin, 'u-boot.bin')):
-        if path:
-            scan_binary(path, label, errors, notes, warnings)
+    if args.elf:
+        scan_binary(args.elf, 'u-boot.elf', errors, notes, warnings, load_only=True)
+    if args.bin:
+        scan_binary(args.bin, 'u-boot.bin', errors, notes, warnings)
 
     report = {
         'result': 'PASS' if not errors else 'FAIL',

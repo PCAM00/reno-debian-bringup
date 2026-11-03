@@ -85,6 +85,48 @@ class Tests(unittest.TestCase):
             vc.scan_binary(small, 'small.bin', errors, [], [])
             self.assertTrue(errors)
 
+    def test_elf_scan_ignores_symbol_strings(self):
+        """A name in .strtab must not be mistaken for loaded code."""
+        import struct
+
+        def fake_elf(needle, offset):
+            data = bytearray(8192)
+            data[0:4] = b'\x7fELF'
+            data[4] = 2          # ELF64
+            data[5] = 1          # little endian
+            struct.pack_into('<Q', data, 0x20, 64)   # e_phoff
+            struct.pack_into('<HH', data, 0x36, 56, 1)  # e_phentsize, e_phnum
+            struct.pack_into('<I', data, 64, 1)      # PT_LOAD
+            struct.pack_into('<Q', data, 64 + 8, 128)    # p_offset
+            struct.pack_into('<Q', data, 64 + 32, 512)   # p_filesz
+            data[offset:offset + len(needle)] = needle
+            return bytes(data)
+
+        inside = fake_elf(b'fastboot', 200)
+        ranges = vc.elf_load_ranges(inside)
+        self.assertEqual(ranges, [(128, 640)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'inside.elf'
+            path.write_bytes(inside)
+            errors = []
+            vc.scan_binary(path, 'inside.elf', errors, [], [], load_only=True)
+            self.assertTrue(errors, 'string inside PT_LOAD must be caught')
+
+            outside = fake_elf(b'fastboot', 5000)   # beyond 128+512
+            path2 = Path(tmp) / 'outside.elf'
+            path2.write_bytes(outside)
+            errors = []
+            vc.scan_binary(path2, 'outside.elf', errors, [], [], load_only=True)
+            self.assertEqual(errors, [], 'symbol-table string must be ignored')
+
+    def test_unreadable_elf_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'notelf.bin'
+            path.write_bytes(b'MZ' + b'x' * 8192)
+            errors = []
+            vc.scan_binary(path, 'notelf.bin', errors, [], [], load_only=True)
+            self.assertTrue(errors, 'an unparsable ELF must fail closed')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
