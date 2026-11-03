@@ -28,6 +28,11 @@ FAT/ext4 写、EFI capsule/FMP、EFI boot manager、distro boot、preboot、
 分区表解析（`PARTITIONS`/`EFI_PARTITION`/`DOS_PARTITION`），
 以及 `CMD_MEMORY`/`CMD_IO`/`CMD_GPIO`/`CMD_I2C`/`CMD_REGULATOR` 这些能直接戳硬件的命令。
 
+**已实测（run 41652024234，success）**：`EFI_PARTITION`/`ISO_PARTITION` 最终仍为 `y`，
+因为 `EFI_LOADER` 拉入 `BOOT_DEFAULTS_FEATURES` 并 `imply` 它们，显式关闭没有生效。
+它们是**解析器**，编译进去的块层下面没有任何介质，所以不构成写入能力；构建告警里的
+`gpt` 字样就来自这里。文档不把"打算关闭"写成"已经关闭"。
+
 第一轮 CI 实际抓到一个真问题：`u-boot.elf` 里出现了 `fastboot` 字样，
 但定位后发现它只是网络代码里的环境变量名 `FASTBOOT_UDP`/`FASTBOOT_TCP`，
 位于 ELF 的符号字符串区，`u-boot.bin` 里 0 次。
