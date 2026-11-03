@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * OPPO Reno PCAM00 / OP46B1 - U-Boot memory-only UEFI prototype.
+ *
+ * COMPILE-ONLY. This describes no storage, no display, no USB and no charger.
+ * It is NOT a bootable Reno board port and has never run on the phone.
+ *
+ * Board identity comes from the PCAM00 F.55 analysis: project 18097 (OP46B1),
+ * msm-id 0x168/0x189, board-id 8.  The SoC/PMIC includes come from the pinned
+ * U-Boot tree (57UU/u-boot@a2a847b1), which does NOT contain a Reno board DTS.
+ */
+
+/dts-v1/;
+
+#include "sdm710.dtsi"
+
+/ {
+	model = "OPPO Reno PCAM00 (OP46B1) U-Boot memory-only prototype";
+	compatible = "oppo,pcam00", "qcom,sdm710", "qcom,sdm670";
+	chassis-type = "handset";
+
+	qcom,msm-id = <0x168 0x0 0x189 0x0>;
+	qcom,board-id = <8 0>;
+	oppo,prjversion = <1 18097>;
+
+	/* The stock F.55 tree exposes a single anonymous /memory node whose reg is
+	 * filled in by the bootloader.  Keep exactly that shape: never guess RAM.
+	 */
+	/delete-node/ memory@80000000;
+
+	memory {
+		device_type = "memory";
+		reg = <0 0 0 0>;
+	};
+};
+
+/* Defence in depth: every physical storage and USB controller stays disabled.
+ * The kernel configuration additionally builds no storage driver at all.
+ */
+&ufs_mem_hc {
+	lanes-per-direction = <1>;	/* F.55 and OPPO source: single lane */
+	status = "disabled";
+};
+
+&ufs_mem_phy {
+	status = "disabled";
+};
+
+&sdhc_2 {
+	status = "disabled";
+};
+
+&usb_1 {
+	status = "disabled";
+};
+
+&usb_1_hsphy {
+	status = "disabled";
+};
+
+&usb_1_dwc3 {
+	status = "disabled";
+};

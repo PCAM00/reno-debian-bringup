@@ -1,0 +1,87 @@
+name: Reno UEFI memory-only prototype (compile only)
+
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - '**.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reno-uefi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+        working-directory: uefi
+    timeout-minutes: 60
+    env:
+      UBOOT_COMMIT: a2a847b1a84e6bcbdbc64f0c20e07fd69e0452fd
+    steps:
+      - name: Checkout reviewed build sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Install cross toolchain
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            make bc bison flex libssl-dev libgnutls28-dev uuid-dev swig \
+            device-tree-compiler python3 python3-dev python3-setuptools \
+            python3-pyelftools git xz-utils lz4
+
+      - name: Fetch immutable U-Boot revision
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git init "$RUNNER_TEMP/u-boot"
+          git -C "$RUNNER_TEMP/u-boot" remote add origin https://github.com/57UU/u-boot.git
+          git -C "$RUNNER_TEMP/u-boot" fetch --depth=1 origin "$UBOOT_COMMIT"
+          git -C "$RUNNER_TEMP/u-boot" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/u-boot" rev-parse HEAD)" = "$UBOOT_COMMIT"
+
+      - name: Test the auditor before trusting it
+        run: |
+          bash -n scripts/build.sh
+          python3 -m py_compile scripts/validate_config.py
+          python3 scripts/test_validate.py
+
+      - name: Compile the prototype
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          UBOOT_DIR="$RUNNER_TEMP/u-boot" UBOOT_OUT="$RUNNER_TEMP/uboot-out" \
+            OUT_DIR="$GITHUB_WORKSPACE/artifacts" \
+            bash scripts/build.sh 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Require the audited outputs
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/artifacts"
+          for f in u-boot.elf u-boot.bin pcam00-uefi-memonly.dtb \
+                   helloworld.efi uefi.config validation.json SHA256SUMS toolchain.txt; do
+            test -s "$f"
+          done
+          python3 -c "import json;d=json.load(open('validation.json'));assert d['result']=='PASS',d"
+          sha256sum -c SHA256SUMS
+
+      - name: Save outputs or useful failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pcam00-uefi-memonly-${{ github.run_number }}
+          path: |
+            artifacts/
+            build.log
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 1
