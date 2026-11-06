@@ -11,7 +11,8 @@ DIR contains the fixed build.sh artifact names, including kernelrelease.txt.
 CHECKOUT is the build source root (the directory containing scripts/, initramfs/,
 config/, dts/, REVISION). Image must contain one IKCFG_ST/gzip/IKCFG_ED envelope
 whose CRC-checked, bounded .config bytes equal kernel.config without rewriting.
-Its separate NUL-terminated Linux version string must match kernelrelease.txt
+Its one or two separate NUL-terminated Linux version strings (weak/final build
+banners) must ALL match kernelrelease.txt
 and the fixed B-v4 release suffix. These are strings/config evidence, not proof
 that every instruction implements the claimed configuration.
 No metadata controls an import, executable, extraction destination, or command.
@@ -258,31 +259,45 @@ def kernel_release(data):
     return data[:-1].decode("ascii")
 
 
+def kernel_banners(image, release, config_start, config_end):
+    """Check every banner, including the weak and final timestamp definitions.
+
+    Pinned init/version.c compiles weak linux_banner first; version-timestamp.c
+    supplies the final definition later. A real Image can retain both strings.
+    Permit at most those two; every occurrence must independently match release.
+    This does not identify which symbol/address the runtime actually prints.
+    """
+    marker = b"Linux version "
+    offsets = [m.start() for m in re.finditer(re.escape(marker), image)]
+    require(1 <= len(offsets) <= 2, "Image must contain one or two Linux version strings")
+    banners = []
+    prefix = marker + release.encode("ascii") + b" "
+    for banner_start in offsets:
+        require(banner_start >= 64 and not 32 <= image[banner_start - 1] <= 126,
+                "Linux version must start a separate printable string")
+        banner_end = image.find(b"\0", banner_start, banner_start + LINUX_VERSION_LIMIT + 1)
+        require(banner_end > banner_start, "Linux version string is unterminated or too long")
+        require(banner_end < config_start or banner_start >= config_end + len(IKCONFIG_END),
+                "Linux version string must be outside IKCONFIG (not gzip metadata)")
+        banner = image[banner_start:banner_end]
+        require(banner.startswith(prefix), "Image Linux version does not match kernelrelease.txt")
+        line = banner[:-1] if banner.endswith(b"\n") else banner
+        require(len(line) > len(prefix) and all(32 <= c <= 126 for c in line),
+                "Invalid Linux version line/build description")
+        banners.append({"offset": banner_start, "text": banner.decode("ascii"),
+                        "nul_terminated": True})
+    return {**banners[0], "text_represents_first_match": True,
+            "occurrence_count": len(banners), "all_match_release": True,
+            "banners": banners, "runtime_canonical_symbol_identified": False,
+            "note": "Up to two weak/final build banners; all checked, not arbitrarily selecting a matching one"}
+
+
 def verify_kernel_image(image, config_bytes, release_bytes):
     config, start, end = extract_ikconfig(image)
     values = config_values(config)
     require(config == config_bytes, "Embedded IKCONFIG differs byte-for-byte from kernel.config")
     release = kernel_release(release_bytes)
-    marker = b"Linux version "
-    banner_start = image.find(marker)
-    require(banner_start >= 64 and image.find(marker, banner_start + 1) == -1,
-            "Image must contain one unique Linux version string")
-    # Strings-style start boundary: linker layout need not put a NUL before
-    # this array, but an embedded suffix of another printable string is not it.
-    require(not 32 <= image[banner_start - 1] <= 126,
-            "Linux version must start a separate printable string")
-    banner_end = image.find(b"\0", banner_start, banner_start + LINUX_VERSION_LIMIT + 1)
-    require(banner_end > banner_start, "Linux version string is unterminated or too long")
-    require(banner_end < start or banner_start >= end + len(IKCONFIG_END),
-            "Linux version string must be outside IKCONFIG (not gzip metadata)")
-    banner = image[banner_start:banner_end]
-    prefix = marker + release.encode("ascii") + b" "
-    require(banner.startswith(prefix), "Image Linux version does not match kernelrelease.txt")
-    # The real linux_banner normally ends in LF then NUL. Permit the LF but no
-    # embedded line breaks, controls, or release-only/empty build description.
-    line = banner[:-1] if banner.endswith(b"\n") else banner
-    require(len(line) > len(prefix) and all(32 <= c <= 126 for c in line),
-            "Invalid Linux version line/build description")
+    banners = kernel_banners(image, release, start, end)
     return {"result": "PASS", "embedded_config_byte_equal": True,
             "embedded_config": {**file_record(config), "format": "generated Linux/arm64 .config",
                                 "start_marker_offset": start, "end_marker_offset": end,
@@ -290,8 +305,7 @@ def verify_kernel_image(image, config_bytes, release_bytes):
                                 "gzip_crc_isize_checked": True, "max_output": IKCONFIG_LIMIT,
                                 "CONFIG_IKCONFIG": values["CONFIG_IKCONFIG"]},
             "kernelrelease": release, "release_matches_image": True,
-            "linux_version": {"offset": banner_start, "text": banner.decode("ascii"),
-                              "nul_terminated": True},
+            "linux_version": banners,
             "complete_code_verification": False,
             "warning": "Valid embedded gzip/config and Linux version string evidence only; "
                        "not formal verification of the complete kernel code"}

@@ -382,7 +382,7 @@ class KernelImageTests(unittest.TestCase):
         prefix = b"Linux version " + FIXTURE_RELEASE + b" "
         good = prefix + b"fixture\n\0"
         bad = (b"", b"unrelated " + FIXTURE_RELEASE + b"\0", good[:-1],
-               good + b"\0" + good, b"prefix " + good,
+               good + b"\0" + good + b"\0" + good, b"prefix " + good,
                b"Linux version 7.2.4-oppo-pcam00-b-ramdiag-v4+ fixture\0",
                b"Linux version " + FIXTURE_RELEASE + b"-different fixture\0",
                b"Linux version " + FIXTURE_RELEASE + b"\0", prefix + b"\0",
@@ -394,6 +394,20 @@ class KernelImageTests(unittest.TestCase):
                 self.verify(kernel_image_fixture(banner=banner))
         boundary = prefix + b"x" * (check.LINUX_VERSION_LIMIT - len(prefix)) + b"\0"
         self.assertTrue(self.verify(kernel_image_fixture(banner=boundary))["release_matches_image"])
+
+    def test_weak_and_final_banners_both_must_match(self):
+        prefix=b'Linux version '+FIXTURE_RELEASE+b' '
+        weak=prefix+b'(fixture) # SMP buildtime\n\0'
+        final=prefix+b'(fixture) #1 SMP buildtime\n\0'
+        report=self.verify(kernel_image_fixture(banner=weak+b'\0'+final))
+        self.assertEqual(report['linux_version']['occurrence_count'],2)
+        self.assertTrue(report['linux_version']['all_match_release'])
+        self.assertFalse(report['linux_version']['runtime_canonical_symbol_identified'])
+        old=final.replace(FIXTURE_RELEASE,b'7.2.3-oppo-pcam00-b-ramdiag-v3+')
+        for invalid in (weak+b'\0'+old,old+b'\0'+final,weak+b'\0'+final[:-1],
+                        weak+b'\0'+final+b'\0'+final):
+            with self.subTest(banner=invalid),self.assertRaises(ValueError):
+                self.verify(kernel_image_fixture(banner=invalid))
 
     def test_release_decoy_in_gzip_header_is_not_image_banner(self):
         # FNAME is authenticated only as gzip framing, not as a kernel banner.
