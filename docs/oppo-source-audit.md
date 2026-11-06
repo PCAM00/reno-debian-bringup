@@ -1,5 +1,17 @@
 # OPPO official-source audit / 18097 diagnostic revision
 
+> **B-v4 addendum:** the source references below are historical evidence, not a
+> claim that old Run3 contains later fixes. The new `pcam00-b-ramdiag-v4` build
+> verifies actual Image/config and cpio/helper byte equality. Runtime monitoring
+> is now PID1-synchronous, with every enumerated zone validated and previously
+> observed identities tracked, plus explicit diagnostic service cleanup before
+> requesting reboot. The deadline is cooperative, not an independent watchdog;
+> ordinary reboot is NOT restoration of original Android after a boot write.
+> Unlock/root/backup status has been confirmed by the user, and root/F.55/ABL
+> content identity was subsequently checked read-only on B. This does not prove
+> DTBO skip, new-kernel boot, safe charging or recovery. See
+> [current B-v4 gate](<B-v4-启动条件与TWRP说明.md>).
+
 **Status: source-grounded RAM-only bring-up, not an installed Debian system or
 verified boot. No phone reboot, flashing, formatting or charger programming was
 performed for this audit.**
@@ -103,8 +115,11 @@ Implemented diagnostic policy (explicitly **not** claimed to be stock behavior):
   within 10 seconds, readings disappear, or any readable zone reaches 70°C.
   70°C is a deliberately conservative **SoC/PMIC diagnostic stop threshold**,
   not an acceptable battery/skin temperature or a charger calibration.
-* The existing 180-second ordinary reboot timer remains as a second best-effort
-  boundary. A hang, wrong readings or failed reset can defeat both mechanisms.
+* The 180-second ordinary reboot deadline is checked by PID1 after initial
+  pseudo-filesystem setup. It is cooperative, not an independent timer or
+  hardware watchdog. Blocking I/O, a hang, wrong readings or failed reset can
+  defeat it. After a persistent boot-partition write, reboot starts that same
+  candidate again; it does not restore Android.
 * Do not turn on `QCOM_LMH` blindly: its current driver programs algorithms and
   temperature thresholds through SCM at probe. That needs separate review/test.
 * Configfs `MaxPower=100` matches the requested descriptor draw; this is **USB
@@ -127,10 +142,17 @@ charging, suspend or unattended operation is made.
 * [S3706 power sequencing:1054–1081](https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/oppo_touchscreen/Synaptics/S3706/synaptics_drivers_s3706.c#L1054-L1081)
   enables 2.8-named supply then 1.8, waits, releases reset, waits again;
   power-off order differs. DTS actually requests 2.960 V for the 2.8-named rail.
-* DTS includes `reset_t0-gpio`, but the audited
-  [common parser:3200–3211](https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/oppo_touchscreen/touchpanel_common_driver.c#L3200-L3211)
-  reads `reset-gpio`; no T0-selection code was found in these reviewed C files.
-  Do not claim PCB40 automatically selects GPIO99 based on a property name.
+* **Scope correction from the R17 Pro comparison:** the common parser initially
+  reads `reset-gpio`, but the separately audited
+  [Reno touch.c:96–122](https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/touch.c#L96-L122)
+  implements `reconfig_power_control()`. For projects 18097/18099 and
+  `PCB == HW_VERSION__10`, it replaces reset with `reset_t0-gpio`; otherwise
+  it releases the `vdd_2v8` regulator reference and sets it to NULL. The common
+  [driver:3729–3746](https://github.com/oppo-source/Reno-9.0-kernel-source/blob/61711727601fe83c11947f308e9987aaf2217652/drivers/input/touchscreen/oppo_touchscreen/touchpanel_common_driver.c#L3729-L3746)
+  calls this hook before power-on. Thus the earlier statement that no T0-selection
+  logic had been found was limited to the C files then inspected, not the whole
+  repository. The older source enum and F.55 PCB numbering still need mapping;
+  **do not infer PCB40 means GPIO99, or change the diagnostic tree on that basis**.
 * The S3706 driver contains firmware flashing/recovery operations and OPPO common
   touch dependencies. It cannot be declared a drop-in upstream RMI4 driver.
 

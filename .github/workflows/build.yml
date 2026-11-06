@@ -1,10 +1,10 @@
-name: Reno PCAM00 RAM-only Debian diagnostics
+name: Reno PCAM00 B v4 RAM-only Linux diagnostics
 on:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: reno-ramdiag-${{ github.ref }}
+  group: reno-b-v4-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
@@ -13,51 +13,82 @@ jobs:
       run:
         shell: bash
     timeout-minutes: 75
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - name: Checkout reviewed build scripts
+      - name: Checkout reviewed B v4 sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
       - name: Install cross-compilation and verification tools
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make bc bison flex \
             libssl-dev libelf-dev device-tree-compiler python3 git xz-utils \
-            qemu-user debian-archive-keyring gpgv ca-certificates gzip
-      - name: Fetch immutable SDM670/710 source revision
+            qemu-user debian-archive-keyring gpgv ca-certificates gzip busybox
+      - name: Fetch immutable SDM670/710 kernel
         env:
           KERNEL_COMMIT: 17601ca5198a736f696447a9b6c568e4be97cc9c
         run: |
+          set -euo pipefail
           git init "$RUNNER_TEMP/linux"
           git -C "$RUNNER_TEMP/linux" remote add origin https://github.com/57UU/linux-sirius.git
           git -C "$RUNNER_TEMP/linux" fetch --depth=1 origin "$KERNEL_COMMIT"
           git -C "$RUNNER_TEMP/linux" checkout --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/linux" rev-parse HEAD)" = "$KERNEL_COMMIT"
-      - name: Test local packers and initramfs safeguards
+      - name: Test before building - no target init execution
         run: |
+          set -euo pipefail
+          test "$(<REVISION)" = pcam00-b-ramdiag-v4
           bash -n scripts/build.sh initramfs/build.sh
-          sh -n initramfs/init
+          for f in initramfs/init initramfs/safety.sh initramfs/runtime.sh initramfs/usb.sh; do
+            sh -n "$f"
+            busybox sh -n "$f"
+          done
           python3 initramfs/test_initramfs.py
           python3 scripts/test_pack.py
           python3 scripts/test_board.py
-      - name: Compile Reno-only kernel and Debian diagnostic initramfs
+          python3 scripts/test_artifact_check.py
+      - name: Compile and verify exact embedded revision
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
           KERNEL_DIR="$RUNNER_TEMP/linux" KERNEL_OUT="$RUNNER_TEMP/kernel-out" \
             OUT_DIR="$GITHUB_WORKSPACE/artifacts" bash scripts/build.sh 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
-          test -s artifacts/Image
           test -s artifacts/boot-pcam00-ramdiag-UNTESTED.img
-          test -s artifacts/validation.json
-      - name: Save successful outputs or useful failure evidence
-        if: always()
+          python3 - <<'PY'
+          import json
+          r=json.load(open('artifacts/artifact-verification.json'))
+          assert r['result']=='PASS'
+          assert r['revision']=='pcam00-b-ramdiag-v4'
+          assert r['source_manifest']['result']=='PASS'
+          assert r['hardware_tested'] is False
+          PY
+          (cd artifacts && sha256sum -c SHA256SUMS)
+      - name: Upload reviewed successful candidate
+        if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: pcam00-ramdiag-${{ github.run_number }}
+          name: pcam00-b-ramdiag-v4-${{ github.run_number }}-UNTESTED
           path: |
             artifacts/
             build.log
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 1
+      - name: Upload failure evidence only - no candidate image
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pcam00-b-ramdiag-v4-${{ github.run_number }}-FAILED-logs
+          path: |
+            build.log
+            artifacts/kernel.config
+            artifacts/validation.json
+            artifacts/dtc-warnings.txt
+            artifacts/busybox-applet-tests.json
           if-no-files-found: warn
           retention-days: 14
           compression-level: 1

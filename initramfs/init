@@ -1,127 +1,193 @@
 #!/bin/sh
-# PID 1: diagnostic appliance, deliberately no interactive recovery shell.
+# Target PID1 only. Host tests NEVER execute/source this file.
+# Read-only diagnostic appliance, no command reader or persistent rootfs.
+[ "$$" -eq 1 ] || { echo 'Refusing to run target init outside PID1' >&2; exit 125; }
 export PATH=/bin
 umask 022
-# A headless kernel may not yet expose a working console. Never let that kill PID1.
 if ( : </dev/console >/dev/console ) 2>/dev/null; then
     exec </dev/console >/dev/console 2>&1
 else
     exec </dev/null >/dev/null 2>&1
 fi
-echo 'Debian-sourced RAM-only diagnostics (not installed Debian)'
-seconds=$(cat /etc/recovery-seconds)
-if [ "$seconds" -gt 0 ]; then
-    ( sleep "$seconds"; echo 'Recovery timer: ordinary forced reboot'; reboot -f ) &
-fi
 idle() { while :; do sleep 3600; done; }
-mount -t proc -o nosuid,nodev,noexec proc /proc || idle
-mount -t sysfs -o nosuid,nodev,noexec sysfs /sys || idle
-mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev || idle
-mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /run || idle
-mount -t tmpfs -o nosuid,nodev,noexec,size=2m,mode=1777 tmpfs /tmp || idle
-mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /www || idle
-. /etc/ramdiag-safety.sh
-# Give built-in TSENS/PMIC drivers up to 10 seconds to publish real readings.
-thermal_ready=0
-for attempt in 1 2 3 4 5; do
-    thermal_snapshot /sys/class/thermal /run/thermal.txt
-    thermal_result=$?
-    if [ "$thermal_result" -eq 0 ]; then thermal_ready=1; break; fi
-    [ "$thermal_result" -eq 1 ] && break
-    sleep 2
-done
-if [ "$thermal_ready" -ne 1 ]; then
-    cat /run/thermal.txt
-    echo 'No verified cool readings: abort RAM diagnostics with ordinary reboot'
-    reboot -f
+emergency_stop() {
+    echo "Early diagnostic failure: $1; reboot request is not Android rollback"
+    timeout -s KILL 3 reboot -f
     idle
-fi
-(
-    while :; do
-        sleep 5
-        if ! thermal_snapshot /sys/class/thermal /run/thermal-current.txt; then
-            echo 'Thermal diagnostic guard stopped the test; this is not a charger driver'
-            reboot -f
-            idle
-        fi
-    done
-) &
-mkdir -p /sys/kernel/config
-mount -t configfs -o nosuid,nodev,noexec configfs /sys/kernel/config || idle
-# All configuration writes below address RAM-backed USB configfs, not storage.
-(
-    set -e
-    g=/sys/kernel/config/usb_gadget/reno_diag
-    mkdir -p "$g"
-    echo 0x1d6b > "$g/idVendor"
-    echo 0x0104 > "$g/idProduct"
-    echo 0x0200 > "$g/bcdUSB"
-    echo 0x0100 > "$g/bcdDevice"
-    echo 0xef > "$g/bDeviceClass"
-    echo 0x02 > "$g/bDeviceSubClass"
-    echo 0x01 > "$g/bDeviceProtocol"
-    mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409"
-    echo reno-ram-diag > "$g/strings/0x409/serialnumber"
-    echo Experimental > "$g/strings/0x409/manufacturer"
-    echo 'Debian-sourced RAM diagnostics' > "$g/strings/0x409/product"
-    echo 'NCM + ACM (no shell)' > "$g/configs/c.1/strings/0x409/configuration"
-    # Descriptor mA only: NOT a hardware input-current or charge limit.
-    echo 100 > "$g/configs/c.1/MaxPower"
-    mkdir -p "$g/functions/ncm.usb0" "$g/functions/acm.usb0"
-    echo 02:00:00:07:00:02 > "$g/functions/ncm.usb0/dev_addr"
-    echo 02:00:00:07:00:01 > "$g/functions/ncm.usb0/host_addr"
-    ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm.usb0"
-    ln -s "$g/functions/acm.usb0" "$g/configs/c.1/acm.usb0"
-    udc=
-    count=0
-    while [ "$count" -lt 40 ]; do
-        for candidate in /sys/class/udc/*; do
-            [ -e "$candidate" ] || continue
-            udc=${candidate##*/}
-            break
-        done
-        [ -z "$udc" ] || break
+}
+mount -t proc -o nosuid,nodev,noexec proc /proc || emergency_stop proc-mount
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys || emergency_stop sys-mount
+mount -t devtmpfs -o nosuid,mode=0755 devtmpfs /dev || emergency_stop dev-mount
+mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /run || emergency_stop run-mount
+mount -t tmpfs -o nosuid,nodev,noexec,size=2m,mode=1777 tmpfs /tmp || emergency_stop tmp-mount
+mount -t tmpfs -o nosuid,nodev,noexec,size=8m,mode=0755 tmpfs /www || emergency_stop www-mount
+. /etc/ramdiag-runtime.sh || emergency_stop missing-runtime
+. /etc/ramdiag-safety.sh || emergency_stop missing-safety
+. /etc/ramdiag-usb.sh || emergency_stop missing-usb
+DIAG_RUN=/run/diag
+DIAG_EXPORT=/run/export
+DIAG_GADGET=/sys/kernel/config/usb_gadget/reno_diag
+DIAG_HTTP_PID= DIAG_IFACE= DIAG_UDC=
+DIAG_STOPPING=0 DIAG_SEQ=0
+mkdir -p "$DIAG_RUN" "$DIAG_EXPORT" || emergency_stop state-directory
+DIAG_REVISION=$(cat /etc/ramdiag-revision) || emergency_stop missing-revision
+[ "$DIAG_REVISION" = pcam00-b-ramdiag-v4 ] || emergency_stop wrong-revision
+seconds=$(cat /etc/recovery-seconds) || emergency_stop missing-deadline
+[ "$seconds" = 180 ] || emergency_stop wrong-deadline
+DIAG_START=$(diag_now) || emergency_stop missing-monotonic-clock
+DIAG_BASELINE="$DIAG_RUN/thermal-baseline"
+
+# These concrete side-effect hooks are defined ONLY in target PID1.
+diag_terminate_children() {
+    local pid="$DIAG_HTTP_PID"
+    [ -n "$pid" ] || return 0
+    case "$pid" in *[!0-9]*) return 1 ;; esac
+    [ "$pid" -gt 1 ] || return 1
+    # setsid created this dedicated group; no foreign workloads run in this initrd.
+    # Kill the listener AND its static HTTP request children, not just the parent.
+    if kill -0 "-$pid" 2>/dev/null; then
+        kill -TERM "-$pid" 2>/dev/null || :
         sleep 1
-        count=$((count + 1))
+        kill -KILL "-$pid" 2>/dev/null || :
+        if kill -0 "-$pid" 2>/dev/null; then return 1; fi
+    fi
+    DIAG_HTTP_PID=
+    return 0
+}
+diag_unbind_usb() {
+    local result=0
+    if [ -n "$DIAG_IFACE" ]; then
+        timeout -s KILL 3 ip link set "$DIAG_IFACE" down || result=1
+    fi
+    if [ -e "$DIAG_GADGET/UDC" ]; then
+        timeout -s KILL 3 sh -c 'printf "\n" > "$1"' sh "$DIAG_GADGET/UDC" || result=1
+    fi
+    return "$result"
+}
+diag_request_reboot() { timeout -s KILL 3 reboot -f; }
+stop_diagnostic() {
+    # Never enter a nested idle from a repeated signal during cleanup.
+    trap '' INT TERM USR1
+    diag_stop_once "$1"
+    idle
+}
+DIAG_STOP_REQUEST=
+trap 'DIAG_STOP_REQUEST=received-stop-signal' INT TERM USR1
+
+# No background monitor: every stop decision is made synchronously by PID1.
+# Signals only latch a request; they do not interrupt a launch/cleanup sequence.
+check_deadline() {
+    local now
+    [ -z "$DIAG_STOP_REQUEST" ] || stop_diagnostic "$DIAG_STOP_REQUEST"
+    now=$(diag_now) || stop_diagnostic missing-monotonic-clock
+    if diag_deadline_reached "$now" "$DIAG_START" "$seconds"; then
+        stop_diagnostic deadline-180-seconds
+    fi
+}
+check_readings() {
+    local result
+    thermal_snapshot /sys/class/thermal "$DIAG_RUN/thermal.txt" "$DIAG_BASELINE"
+    result=$?
+    [ "$result" -ne 1 ] || stop_diagnostic thermal-threshold
+    [ "$result" -eq 0 ] || stop_diagnostic invalid-or-disappeared-thermal-zone
+    thermal_learn_baseline "$DIAG_RUN/thermal.txt" "$DIAG_BASELINE" || stop_diagnostic thermal-baseline-failed
+    cpu_policy_snapshot /sys/devices/system/cpu/cpufreq "$DIAG_RUN/cpu-policy.txt" || stop_diagnostic cpu-policy-unverified
+}
+
+# Only fixed, RAM-backed plain text files are exported; no symlinks or CGI.
+# /www/live is a read-only bind view of this directory. PID1 updates the original
+# /run/export path, so clients can see later snapshots without obtaining writes.
+publish_live() {
+    local name
+    for name in state.txt stages.log thermal.txt cpu-policy.txt; do
+        cp "$DIAG_RUN/$name" "$DIAG_EXPORT/$name.next" || return 1
+        chmod 0444 "$DIAG_EXPORT/$name.next" || return 1
+        mv "$DIAG_EXPORT/$name.next" "$DIAG_EXPORT/$name" || return 1
     done
-    [ -n "$udc" ] || { echo 'ERROR: no USB device controller after 40s'; exit 1; }
-    echo "$udc" > "$g/UDC"
-    iface=$(cat "$g/functions/ncm.usb0/ifname")
-    ip link set lo up
-    ip addr add 192.168.7.2/30 dev "$iface"
-    ip link set "$iface" up
-    echo "UDC=$udc interface=$iface phone=192.168.7.2/30"
-    echo 'ACM enumerated only; no getty, command interpreter, or input reader.'
-) > /run/usb-setup.log 2>&1
-usb_result=$?
-cat /run/usb-setup.log
+    timeout -s KILL 2 dmesg > "$DIAG_EXPORT/dmesg.txt.next" 2>&1 || return 1
+    chmod 0444 "$DIAG_EXPORT/dmesg.txt.next" || return 1
+    mv "$DIAG_EXPORT/dmesg.txt.next" "$DIAG_EXPORT/dmesg.txt"
+}
+
+diag_stage entered-pid1-fs-ready || stop_diagnostic stage-write-failed
+# Up to ten seconds for the enumerated thermal zones and CPU policy to settle.
+# Invalid/missing/partial readings are reported, never silently ignored.
+ready=0
+attempt=0
+while [ "$attempt" -le 10 ]; do
+    check_deadline
+    thermal_snapshot /sys/class/thermal "$DIAG_RUN/thermal.txt"
+    thermal_result=$?
+    [ "$thermal_result" -ne 1 ] || stop_diagnostic initial-thermal-threshold
+    cpu_policy_snapshot /sys/devices/system/cpu/cpufreq "$DIAG_RUN/cpu-policy.txt"
+    cpu_result=$?
+    [ "$cpu_result" -ne 1 ] || stop_diagnostic initial-cpu-policy-not-powersave
+    if [ "$thermal_result" -eq 0 ] && [ "$cpu_result" -eq 0 ]; then ready=1; break; fi
+    [ "$attempt" -lt 10 ] || break
+    sleep 1
+    attempt=$((attempt + 1))
+done
+[ "$ready" -eq 1 ] || stop_diagnostic initial-readings-unverified
+thermal_learn_baseline "$DIAG_RUN/thermal.txt" "$DIAG_BASELINE" || stop_diagnostic thermal-baseline-failed
+diag_stage initial-observed-zones-and-cpu-policy-verified || stop_diagnostic stage-write-failed
+mkdir -p /sys/kernel/config || stop_diagnostic configfs-directory
+mount -t configfs -o nosuid,nodev,noexec configfs /sys/kernel/config || stop_diagnostic configfs-mount
+usb_prepare > "$DIAG_RUN/usb-setup.log" 2>&1 || stop_diagnostic usb-prepare-failed
+diag_stage waiting-for-udc || stop_diagnostic stage-write-failed
+count=0
+while [ "$count" -lt 40 ]; do
+    check_deadline
+    check_readings
+    usb_find_udc
+    result=$?
+    [ "$result" -ne 2 ] || stop_diagnostic ambiguous-usb-controller
+    [ "$result" -ne 0 ] || break
+    sleep 1
+    count=$((count + 1))
+done
+[ -n "$DIAG_UDC" ] || stop_diagnostic no-usb-controller
+check_deadline
+check_readings
+usb_bind >> "$DIAG_RUN/usb-setup.log" 2>&1 || stop_diagnostic usb-bind-failed
+diag_stage usb-ncm-bound || stop_diagnostic stage-write-failed
+check_readings
 {
-    echo 'Debian-sourced minimal diagnostics; NOT installed Debian or a desktop.'
-    echo "USB setup exit=$usb_result; recovery timer=${seconds}s (0=disabled)."
-    echo 'Static boot snapshot; GET-only files, no CGI, no shell, no internal mounts.'
-    echo 'Files: /status.txt /dmesg.txt /os-release /packages.txt'
-    cat /run/usb-setup.log
-    echo '--- initial thermal readings (not battery safety) ---'
-    cat /run/thermal.txt
-    echo '--- actual CPU policy ---'
-    for governor in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
-        if [ -r "$governor" ]; then
-            printf '%s: ' "$governor"
-            cat "$governor"
-        fi
-    done
-    cat /proc/uptime /proc/meminfo
-    ip addr show
-} > /www/status.txt
-cat /www/status.txt > /www/index.html
-dmesg > /www/dmesg.txt 2>&1
-cat /etc/os-release > /www/os-release
-cat /etc/package-provenance.txt > /www/packages.txt
-# No files, symlinks, scripts, upload endpoints, or CGI in this docroot.
-chmod 0444 /www/*
-mount -t tmpfs -o remount,ro,nosuid,nodev,noexec tmpfs /www || idle
-if [ "$usb_result" -eq 0 ]; then
-    httpd -f -p 192.168.7.2:8080 -h /www -c /etc/httpd.conf -u 65534:65534 &
-    echo 'Read-only diagnostics: http://192.168.7.2:8080/ (USB host .1 only)'
-fi
-idle
+    echo 'PCAM00 B v4: native RAM diagnostics, not installed Debian.'
+    echo 'Kernel storage access disabled. No automatic restoration of Android.'
+    echo 'An ordinary reboot starts the installed boot image again.'
+    printf 'revision=%s\ndeadline_seconds=%s\n' "$DIAG_REVISION" "$seconds"
+    cat "$DIAG_RUN/usb-setup.log"
+    echo 'Snapshot files under /live refresh every five seconds while healthy.'
+    echo 'Stage evidence only becomes externally visible AFTER USB/HTTP works.'
+    echo 'A silent USB/ACM connection does not locate the failing boot stage.'
+} > /www/status.txt || stop_diagnostic initial-status-failed
+cp /www/status.txt /www/index.html || stop_diagnostic initial-index-failed
+cp /etc/os-release /www/os-release || stop_diagnostic os-release-failed
+cp /etc/package-provenance.txt /www/packages.txt || stop_diagnostic provenance-failed
+mkdir -p /www/live || stop_diagnostic live-directory
+publish_live || stop_diagnostic live-snapshot-failed
+chmod 0444 /www/status.txt /www/index.html /www/os-release /www/packages.txt
+mount -o bind "$DIAG_EXPORT" /www/live || stop_diagnostic live-bind-failed
+mount -o remount,bind,ro,nosuid,nodev,noexec /www/live || stop_diagnostic live-readonly-failed
+mount -t tmpfs -o remount,ro,nosuid,nodev,noexec tmpfs /www || stop_diagnostic docroot-readonly-failed
+check_deadline
+check_readings
+setsid httpd -f -p 192.168.7.2:8080 -h /www -c /etc/httpd.conf -u 65534:65534 > "$DIAG_RUN/http.log" 2>&1 &
+DIAG_HTTP_PID=$!
+sleep 1
+kill -0 "$DIAG_HTTP_PID" 2>/dev/null || stop_diagnostic http-not-running
+diag_stage http-running-waiting-for-host || stop_diagnostic stage-write-failed
+publish_live || stop_diagnostic live-snapshot-failed
+last_snapshot=$(diag_now) || stop_diagnostic missing-monotonic-clock
+while :; do
+    check_deadline
+    check_readings
+    kill -0 "$DIAG_HTTP_PID" 2>/dev/null || stop_diagnostic http-exited
+    now=$(diag_now) || stop_diagnostic missing-monotonic-clock
+    if [ "$((now - last_snapshot))" -ge 5 ]; then
+        diag_stage monitoring-observed-zones || stop_diagnostic stage-write-failed
+        publish_live || stop_diagnostic live-snapshot-failed
+        last_snapshot=$now
+    fi
+    sleep 1
+done

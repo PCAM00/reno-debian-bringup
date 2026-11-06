@@ -1,102 +1,56 @@
-# Debian-sourced RAM diagnostics for experimental Reno/SDM710
+# Debian-sourced PCAM00 B v4 initramfs
 
-This is **not an installed Debian system or a desktop**. Only the official
-`busybox-static:arm64` executable and `base-files:arm64` release metadata are
-copied into a small custom initramfs. There is no package database, systemd,
-root filesystem installation, network shell, SSH, telnet, getty, or mass storage.
+**Target PID1 code. Do not run or source the [init program](<init>) on the host.**
+This is a native RAM diagnostic, not installed Debian or a desktop. Debian
+`busybox-static:arm64` and `base-files` are extracted using authenticated APT;
+maintainer scripts, chroot, container init and target boot code are not run.
 
-## Build on GitHub Actions Ubuntu 24.04 x86_64
+## Runtime contract
 
-Prerequisites (install via Ubuntu's authenticated APT; no GitHub token required):
+- One 180-second monotonic deadline after initial RAM/virtual filesystem setup;
+  synchronously checked by PID1, not a hardware watchdog or automatic rollback.
+- Enumerated thermal zones must all return plausible readings below the diagnostic
+  70000-mC threshold. Partial failures are rejected, and baseline identity/missing
+  zones are checked. This does not prove all sensors probed or provide battery
+  protection. CPU governors are read-only checked for powersave.
+- PID1 attempts to terminate its HTTP session process group, lower the NCM
+  interface/unbind its own gadget, then request bounded ordinary reboot. Duplicate
+  stop signals are ignored during cleanup. If reboot returns, it stays stopped.
+  Kernel uninterruptible sleep, early hangs and power/reset faults remain risks.
+- No block storage, NVM, bootloader state, persistent log or partition write.
+- RAM stage records become visible only once USB NCM/HTTP works. No external
+  pre-USB console is claimed. ACM is only enumeration, not an interactive shell.
+- Periodic plain-text snapshots are exported via a read-only bind view at
+  `/live/`; no CGI/symlink/upload/command endpoint. Only trusted directly attached
+  host 192.168.7.1 may access 192.168.7.2:8080. No routing/DHCP/Internet.
+- USB MaxPower=100 is descriptor metadata, not a charging current limit.
 
-```sh
-sudo apt-get update
-sudo apt-get install --no-install-recommends apt dpkg debian-archive-keyring \
-  gpgv ca-certificates binutils python3 gzip coreutils bash qemu-user
-OUT_DIR="$RUNNER_TEMP/reno-initramfs" VERIFY_APPLETS=required bash build.sh
-PYTHONDONTWRITEBYTECODE=1 python3 test_initramfs.py
-```
+If boot was persistently replaced via TWRP, ordinary reboot boots the replacement
+again. It does not restore original Android. TWRP tests are a later separate
+operation, after compatibility and the phone's own restoration route are clear.
 
-Invoke from this directory, or use the full script path. Run the build as the
-normal runner user, not sudo. Output must be a disposable, dedicated directory
-on a filesystem with POSIX permissions/symlinks (not Android shared storage).
-The script only writes in `OUT_DIR`, including its isolated APT workspace; it
-does not modify host APT configuration, add an architecture, install target
-packages, run dpkg maintainer scripts, chroot, or run a foreign init. QEMU is
-optional and executes only `busybox --list`; require it in CI to fail closed if
-any required applet is missing. `VERIFY_APPLETS=off` executes no foreign code.
+## Packaging
 
-| Environment | Meaning |
-| --- | --- |
-| `OUT_DIR` | Required absolute directory; must not resolve to `/`. Existing named outputs are replaced. No whitespace, double quotes or backslashes (APT config syntax). |
-| `DEBIAN_ARCHIVE_KEYRING` | Absolute initial trust anchor; default `/usr/share/keyrings/debian-archive-keyring.gpg`. |
-| `VERIFY_APPLETS` | `auto` (default), `required`, or `off`. Unverified builds have an explicit report warning. |
-| `RECOVERY_SECONDS` | Decimal 0–99999; default `180`; `0` disables automatic reboot. Built into image, not a kernel command-line parser. |
-| `SOURCE_DATE_EPOCH` | Decimal archive mtime, default `0`; maximum 4294967295. gzip has no timestamp. |
+[Build script](<build.sh>) is intended for the GitHub-hosted Ubuntu24.04 runner,
+not the phone/SSH bridge. It extracts Debian packages in an isolated APT directory,
+requires architecture/static-ELF checks, verifies required BusyBox applets via
+QEMU-user (not a phone emulation) and writes a root-owned gzip/newc archive.
 
-Outputs: `initramfs-debian-arm64.cpio.gz`, `package-provenance.txt`, and
-`provenance/` (authenticated InRelease files, source definitions and effective
-keyring). The report contains package versions, architectures and SHA256s.
-Source definitions record temporary trust-anchor paths, not reusable APT config.
-APT validates signatures and package hashes against HTTPS official Debian
-repositories. Ubuntu Noble's older Debian keyring is upgraded **by extraction**
-from the authenticated bookworm `debian-archive-keyring` package before trixie
-is queried. Missing keys or bad signatures abort, never fall back to insecure
-sources. Current suite versions float; metadata and hashes record the selected
-packages, but this is not a snapshot-pinned historical reproducibility promise.
+Files [safety helper](<safety.sh>), [runtime coordinator](<runtime.sh>) and
+[USB helper](<usb.sh>) are copied byte-for-byte to their `/etc/ramdiag-*` paths,
+as is the source [version marker](<../REVISION>) to `/etc/ramdiag-revision`.
+The kernel boot wrapper is checked by the [artifact verifier](<../scripts/artifact_check.py>),
+which compares all these embedded files against trusted reviewed source.
 
-## Kernel/runtime contract
+[Tests](<test_initramfs.py>) source only side-effect-free state/thermal functions
+with synthetic sysfs and mocked terminate/unbind/reboot hooks. They never launch
+the target init or touch actual devices. Optional CI applet semantic checks run
+only inert scripts under QEMU on the runner, never mounting or rebooting it.
 
-Build in ARM64 ELF/script execution, gzip initramfs support, `CONFIG_BLOCK=n`,
-procfs, sysfs, devtmpfs, tmpfs, configfs, IPv4 networking, USB gadget/DWC3 device
-mode and configfs NCM + ACM; use built-ins, not modules. The image's executable
-`/init`, a `0600` character `/dev/console` (major 5, minor 1), and a `0666`
-`/dev/null` (major 1, minor 3) are encoded by the unprivileged Python newc writer.
-The latter is available before devtmpfs for the background timer and headless
-console fallback. No cpio executable, sudo or `mknod` is needed.
-The kernel/DTS must actually register a working UDC and USB PHY. Nothing here
-validates hardware bring-up, powers unsupported components, or installs a kernel.
+The source-only helpers have no side effects until explicitly called. The USB
+helper does have hardware/configfs operations when called by target PID1; do not
+call it on a workstation or running Android system.
 
-Init mounts only proc/sysfs/devtmpfs/tmpfs/configfs. It never discovers, mounts,
-formats, repairs, resizes or writes internal partitions; it writes no
-persist/misc/firmware data or bootloader reboot requests. It configures a
-RAM-backed NCM+ACM gadget, waits up to 40 seconds for a UDC and reads the NCM
-function's actual interface name. Lab-only VID/PID `1d6b:0104` must not be treated
-as a production USB identity. Fixed MACs mean connect only one such device per
-link:
-
-- phone: `02:00:00:07:00:02`, `192.168.7.2/30`
-- USB host: `02:00:00:07:00:01`; manually assign `192.168.7.1/30`
-- diagnostic URL: `http://192.168.7.2:8080/`
-
-No DHCP, DNS, routing or Internet is configured. The only network listener is
-BusyBox httpd bound to the USB IP/8080, dropped to UID/GID 65534 and allowlisted
-to `.1`. It serves a **read-only mounted, noexec** tmpfs of static boot status,
-dmesg, release metadata and provenance. No CGI, links, uploads or commands are
-present. Logs are an initial snapshot, not live streaming. This diagnostic
-endpoint is not encrypted/authenticated: connect only to a trusted USB host.
-ACM enumerates for driver testing only; no serial shell/input service is started.
-
-The official-source revision includes `/etc/ramdiag-safety.sh`. It reads only
-thermal sysfs values, allows up to 10 seconds for valid readings, and requests
-an ordinary reboot if readings are missing or any zone reaches 70000 m°C.
-This is a conservative **SoC/PMIC diagnostic** threshold, not a battery/skin
-safety threshold or charger policy. It never changes thermal trip registers,
-charger settings or CPU frequency sysfs values. CPU powersave is selected by
-the kernel configuration. Tests exercise only temporary fake sysfs fixtures.
-The USB MaxPower descriptor is 100 mA; it is not a hardware charging limit.
-
-The default independent 180-second timer runs `reboot -f` (ordinary kernel
-reboot, no bootloader argument or misc write). This is a best-effort recovery
-convenience, **not a safety guarantee**: a kernel hang or missing reboot driver
-can defeat it. Failure paths idle instead of spawning a shell. The timer starts
-before mounts/USB setup and intentionally disconnects diagnostics when it fires.
-
-## Validation limits
-
-Offline tests check shell syntax, newc records/padding/root ownership/console,
-deterministic serialization and a limited RAM-only surface regression check.
-They never execute init. Android shared storage cannot make symlinks, so that
-fixture assertion is omitted there; Ubuntu covers it. Full authenticated
-package resolution and optional ARM64 applet probing require the Ubuntu runner.
-Neither local tests nor successful image generation prove the phone boots.
+Authenticated Debian versions and signatures are recorded, not promised
+snapshot-pinned. Build scripts require fresh dedicated artifact directories;
+old outputs must not be presented as a new revision. No flash script is included.

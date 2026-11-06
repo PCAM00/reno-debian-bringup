@@ -9,7 +9,8 @@ VERIFY_APPLETS=${VERIFY_APPLETS:-auto}
 RECOVERY_SECONDS=${RECOVERY_SECONDS:-180}
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-0}
 [[ $VERIFY_APPLETS =~ ^(auto|required|off)$ ]] || exit 2
-[[ $RECOVERY_SECONDS =~ ^[0-9]+$ && ${#RECOVERY_SECONDS} -le 5 ]] || exit 2
+[[ $RECOVERY_SECONDS = 180 ]] || { echo 'This reviewed revision fixes the diagnostic deadline at 180 seconds' >&2; exit 2; }
+[[ -f "$HERE/../REVISION" && $(<"$HERE/../REVISION") = pcam00-b-ramdiag-v4 ]] || exit 2
 [[ $SOURCE_DATE_EPOCH =~ ^[0-9]+$ && ${#SOURCE_DATE_EPOCH} -le 10 ]] || exit 2
 for cmd in apt-get dpkg-deb gpgv readelf python3 gzip sha256sum realpath; do command -v "$cmd" >/dev/null; done
 [[ -r $KEYRING && $KEYRING = /* ]] || { echo 'Missing absolute Debian archive keyring' >&2; exit 1; }
@@ -102,7 +103,7 @@ import pathlib, sys
 assert 'AArch64' in pathlib.Path(sys.argv[1]).read_text(), 'Not AArch64'
 assert 'INTERP' not in pathlib.Path(sys.argv[2]).read_text(), 'Not static'
 PY
-applets='sh mount mkdir cat dmesg ip httpd sleep reboot ln chmod'
+applets='sh mount mkdir cat dmesg ip httpd sleep reboot ln chmod cp mv timeout setsid kill'
 if [[ $VERIFY_APPLETS != off ]] && command -v qemu-aarch64 >/dev/null; then
     qemu-aarch64 "$root/bin/busybox" --list > "$work/applets"
     python3 - "$work/applets" $applets <<'PY'
@@ -111,6 +112,8 @@ missing = set(sys.argv[2:]) - set(pathlib.Path(sys.argv[1]).read_text().splitlin
 assert not missing, f'Missing BusyBox applets: {sorted(missing)}'
 PY
     printf '\nRequired applets: verified via qemu-aarch64 --list\n' >> "$report"
+    python3 "$HERE/test_busybox_applets.py" --busybox "$root/bin/busybox" \
+        --output "$OUT_DIR/busybox-applet-tests.json"
 else
     [[ $VERIFY_APPLETS != required ]] || { echo 'Install qemu-user to verify applets' >&2; exit 1; }
     printf '\nWARNING: applets unverified; use qemu-user and VERIFY_APPLETS=required.\n' >> "$report"
@@ -121,7 +124,10 @@ cp "$work/base/etc/debian_version" "$root/etc/debian_version"
 printf '%s\n' "$RECOVERY_SECONDS" > "$root/etc/recovery-seconds"
 printf 'A:192.168.7.1\nD:*\n' > "$root/etc/httpd.conf"
 cp "$report" "$root/etc/package-provenance.txt"
-cp "$HERE/safety.sh" "$root/etc/ramdiag-safety.sh"
+cp "$HERE/../REVISION" "$root/etc/ramdiag-revision"
+for helper in safety runtime usb; do
+    cp "$HERE/$helper.sh" "$root/etc/ramdiag-$helper.sh"
+done
 cp "$HERE/init" "$root/init"
 chmod 0755 "$root/init" "$root/bin/busybox"
 python3 "$HERE/mkcpio.py" "$root" "$SOURCE_DATE_EPOCH" | gzip -n -9 > "$OUT_DIR/initramfs-debian-arm64.cpio.gz"

@@ -1,115 +1,120 @@
-# OPPO Reno PCAM00 — experimental native Debian bring-up
+# OPPO Reno PCAM00 B — direct Linux RAM diagnostics v4
 
-**COMPILE-ONLY / UNTESTED ON HARDWARE / DO NOT FLASH.**
+**REVISION: `pcam00-b-ramdiag-v4` · COMPILE-ONLY · NOT BOOTED ON HARDWARE · DO NOT FLASH.**
 
-This is a first board-specific experiment for OPPO Reno PCAM00 (OP46B1,
-project 18097, Snapdragon SDM710). It is not a Xiaomi Mi 8 SE image and not a
-finished Debian phone distribution. It combines a custom Reno device tree,
-an ARM64 Linux kernel and a tiny RAM-resident diagnostic environment extracted
-from authenticated Debian trixie packages (`busybox-static` and `base-files`).
-No Android, chroot, proot, LXC or VM is needed for the intended native boot.
-However, no successful Reno boot is claimed by a successful CI build.
+The user approved preparing and cloud-building this revision, not rebooting or
+flashing the phone. It is not a finished Debian installation, U-Boot image or
+EDK2 port. A successful Actions job is only compilation/structural evidence.
 
-## Official OPPO-source revision
+## Why a new revision
 
-The official Android 9 / Linux 4.9.112 release was actually inspected at commit
-`61711727601fe83c11947f308e9987aaf2217652`, then cross-checked with F.55 evidence.
-See [source audit](docs/oppo-source-audit.md) for exact source lines and limitations.
+The downloaded Run3 artifact predates later source changes. It uses performance
+by default and lacks the new thermal helper and board USB tuning. Its historical
+hashes are intact, but it must not be described as this v4 implementation.
 
-This revision sets Reno USB PHY TUNE1=0x77 / BIAS2=0x20 through mainline field
-properties, avoids the later nvmem override, restores the original `/memory`
-placeholder, records disabled single-lane UFS, defaults CPU policy to powersave,
-and adds a read-only thermal diagnostic stop condition. It still does **not**
-implement full charging, display, touch or a complete Debian root filesystem.
+This build embeds the version marker in kernel localversion, board DT and cpio,
+archives an explicit reviewed source scope, and verifies the embedded Image,
+DTB, init, helpers and revision byte-for-byte. Code changes must not be credited
+to an older download.
 
-## Intended first milestone
+## Intended milestone and limits
 
-* Native kernel reaches `/init` in RAM.
-* USB NCM enumerates; phone address `192.168.7.2/30`.
-* A directly attached host at `192.168.7.1` may read static diagnostic files at
-  `http://192.168.7.2:8080/` — no passwordless shell or upload/CGI interface.
-* USB ACM enumerates without a command interpreter.
-* Default recovery timer requests an ordinary reboot after 180 seconds.
-  This is **best effort**, not a guarantee against an earlier kernel hang.
+- Native ARM64 Linux reaches a custom RAM-resident `/init`.
+- USB2 device-mode NCM offers plain text diagnostics at `http://192.168.7.2:8080/`
+  to one trusted host `192.168.7.1/30`. No SSH, shell, CGI, upload, DHCP, routing
+  or internet service.
+- ACM enumerates only; it is **not an early printk console or interactive shell**.
+- While healthy, `/live/state.txt`, `/live/stages.log`, `/live/thermal.txt`,
+  `/live/cpu-policy.txt` and `/live/dmesg.txt` refresh every five seconds through
+  a read-only bind view. The endpoint is unauthenticated: trusted USB host only.
+- Before USB/HTTP works, RAM phase records cannot be observed externally. A
+  silent USB connection cannot locate the failed boot stage.
 
-## Safety boundaries of this build
+Display, touch, GPU, audio, Wi-Fi, Bluetooth and persistent rootfs remain later
+work. The tiny userland comes from authenticated Debian trixie packages
+(`busybox-static` and `base-files`); it is not proot/chroot or installed Debian.
 
-* `CONFIG_BLOCK=n`: no internal block storage APIs. UFS/MMC nodes also disabled.
-* No partition names, formatting, filesystem expansion, boot control block,
-  AVB edits, modem calibration, Wi-Fi NVM patches or partition-writing commands.
-* No loadable modules, `/dev/mem`, EFI variables, remoteproc, display, GPU,
-  touch, sound, Wi-Fi, Bluetooth, battery charging policy or Type-C/PD driver.
-  The generic power-supply framework is enabled as a USB PHY dependency, but
-  no charger/battery hardware driver is enabled.
-* Stock F.55 static reserved memory ranges are preserved; assertions check
-  coverage and overlap. AOP/CMD-DB/SMEM subranges follow SoC definitions and
-  remain a live-hardware verification item.
-* USB gadget controller/PHY and three evidenced USB supplies are enabled.
-  RPMh/clock/IOMMU/PMIC handling still touches hardware: **RAM-only does not mean
-  electrically risk-free, guaranteed recovery, or safe charging**.
-* PMIC/SoC temperature support is requested. Missing readings or a 70°C
-  diagnostic threshold trigger a best-effort ordinary reboot. This is not a
-  battery temperature limit or charging protection. Short, attended tests only.
+## Runtime design
 
-## Source and evidence
+- `CONFIG_BLOCK=n`; modules/DEVMEM/EFI variables/remoteproc/physical storage
+  interfaces disabled, UFS/MMC nodes disabled. No internal filesystem repair,
+  formatting, expansion, BCB or firmware/NVM modification.
+- Fixed reserved-memory ranges retained without overlap. RAM is one zero-length
+  `/memory` placeholder for the bootloader; the included SoC's old memory node
+  is removed. This does not prove runtime topology or dynamic reservations.
+- Reno USB TUNE1=0x77/BIAS2=0x20 and supply mappings follow the source audit.
+  Removing this PHY's nvmem consumer prevents later trim overwrite; no fuse or
+  NVM content is changed. Mainline operation on this board is still untested.
+- CPU powersave is required in resolved config; PID1 checks actual policy without
+  programming frequency sysfs values.
+- After at most ten seconds of settling, all enumerated thermal zones must be
+  valid and below 70000 mC. Observed zones may not disappear/change type. This
+  does not prove every physical sensor probed, and is not battery/skin protection.
+- PID1 makes synchronous stop decisions. It attempts to terminate the diagnostic
+  HTTP process group, bring NCM down/unbind its own gadget, then request an
+  ordinary reboot. A returning reboot never restarts the diagnostic services.
+- The 180-second deadline is checked by PID1 using monotonic uptime, **not a
+  hardware watchdog**. A pre-PID1 hang, blocking driver, scheduler/reset failure
+  can defeat it. Inherited charging state is unmanaged and USB supplies VBUS.
 
-Kernel reference: https://github.com/57UU/linux-sirius/tree/17601ca5198a736f696447a9b6c568e4be97cc9c
+**An ordinary reboot does not restore Android after a TWRP boot-partition write.**
+It starts the installed boot image again. Restoring this phone's original boot
+via a verified recovery route is a separate manual action.
 
-That immutable revision declares **Linux 7.2.3**, despite earlier research
-notes calling another binary 7.3. Only common SoC and PMIC include files are
-used; the Xiaomi board DTS, boot scripts, rootfs, partition numbers and GPIO
-assignments are not used.
+## Bootloader / DTBO gate still open
 
-Reno data source: local analysis of the PCAM00 F.55 sample, base DTB index 4 and
-DTBO entry 32. Sample ZIP SHA256:
-`a3a3226634bab03db1537ab10620fe2b57af2df924428a28e36bbf97776c2748`.
-The sample contains a modified vbmeta and is not proven to be an untouched
-vendor recovery package. No firmware binaries or per-device data are published
-in this repository.
+Read-only B checks established normal F.55 Android/root operation and full ABL
+partition byte identity with the analyzed sample. The standard fastboot command
+table has no plain `boot`; `continue` loads a partition image rather than the
+buffer. That differs from being unable to enter fastboot mode.
 
-Reno evidence was additionally checked read-only on a PCAM00 F.55 phone:
-DTB index 4 / DTBO index 32 and fixed reserved-memory ranges match; panel reports
-AMS641RW01, touch firmware S3706. These observations still do not validate the
-new kernel or its bootloader handoff. No device identifiers or backup data are
-included here.
+ABL has a conditional exact-match branch skipping board-DTBO selection. Current
+candidate fields do not prove it: foundry, subtype and PMIC model match remain
+incomplete. Stock DTBO is not ABI-compatible with the mainline tree. **Do not
+erase DTBO, graft stock phandles, modify firmware or equate dtc success with
+runtime handoff.**
 
-USB supply mappings from static stock DT:
-PM660 L10 = 1.8 V; PM660L L1 = 0.88–0.9 V; PM660L L7 = 3.088–3.1 V.
-No parent-rail programming or guessed Xiaomi PHY trims are added.
+See [B v4 gate and TWRP notes](<docs/B-v4-启动条件与TWRP说明.md>) and
+[official source audit](<docs/oppo-source-audit.md>).
 
-## Build
+## Immutable sources
 
-Use the manually triggered GitHub Actions workflow in this repository.
-It pins kernel and Action revisions, cross-compiles on Ubuntu 24.04, verifies
-required/prohibited configuration, parses final DTB reservations, obtains
-Debian packages with APT signature verification and checks ARM64 BusyBox applets
-using QEMU user emulation. QEMU applet checks are **not phone boot tests**.
+- Kernel: [57UU/linux-sirius@17601ca](https://github.com/57UU/linux-sirius/tree/17601ca5198a736f696447a9b6c568e4be97cc9c),
+  Makefile version 7.2.3. Reuse only common SoC/PMIC includes, not Xiaomi's board,
+  partition numbers, boot scripts or rootfs.
+- Vendor evidence: [OPPO Reno@6171172](https://github.com/oppo-source/Reno-9.0-kernel-source/tree/61711727601fe83c11947f308e9987aaf2217652),
+  Android9/4.9.112, cross-checked with F.55/4.9.227. Public source hashes are in
+  [the index](<docs/oppo-source-files.json>).
+- Debian packages come from authenticated repositories with recorded versions;
+  future resolution is not claimed to be snapshot-pinned.
 
-Outputs on success:
+No private backups, calibration, full device FDT, credentials or proprietary
+firmware are published in the build repository.
 
-* `Image` and `sdm710-oppo-pcam00-ramdiag.dtb`
-* `initramfs-debian-arm64.cpio.gz`
-* `boot-pcam00-ramdiag-UNTESTED.img`: unsigned candidate Android boot header v1,
-  page size 4096, gzip Image + Reno DTB. Header addresses match the static sample,
-  **not measured ABL load locations**.
-* resolved kernel config, compiled DT, validation JSON, checksums and Debian
-  package provenance.
+## Build and verify
 
-Failed runs may upload logs/config only. Artifact existence alone is not success.
+Manually dispatch the Linux Actions workflow. It installs tools on the hosted
+runner only; no device command exists in CI. It runs syntax/mocked guard and
+negative image tests, compiles `allnoconfig` plus the reviewed fragment, checks
+resolved config and DT, builds cpio, packages header-v1/page4096 gzip Image plus
+one DTB, then independently parses every embedded component and source revision.
 
-## Before any real boot attempt
+Outputs on success include Image, DTB, cpio, unsigned
+`boot-pcam00-ramdiag-UNTESTED.img`, config, verification JSON, source snapshot,
+Debian package provenance and recursive checksums. Failure evidence may contain
+incomplete output; filename/ZIP existence is not success.
 
-1. Confirm live PCAM00 model/project, unlocked bootloader, applied DT, current
-   boot/recovery versions and complete partition map.
-2. Obtain and verify backups; confirm a tested way back to working Android.
-3. Resolve ABL `fastboot boot` support, DTB selection and whether stock DTBO
-   would be applied to this incompatible mainline device tree.
-4. Confirm ABL supplies real RAM topology; DTS deliberately has a zero-length
-   placeholder, not guessed memory size.
-5. Review USB PHY, SMMU/TZ permissions and inherited PMIC/charging state.
-6. Get explicit owner approval for the exact temporary boot procedure.
+Using a separately trusted source checkout, never artifact-supplied executable
+code:
 
-There are intentionally **no automated flash or reboot commands** in CI. Do not
-remove/erase DTBO or flash boot/userdata merely because compilation succeeded.
-A full Debian system, root filesystem on UFS, desktop and external hardware
-support are later milestones, not delivered by this diagnostic image.
+```sh
+python3 scripts/artifact_check.py --artifacts /absolute/unpacked/artifacts \
+  --source-root /absolute/trusted/source --output /absolute/new-report.json
+```
+
+Source-manifest hashes establish equality to supplied trusted source, not remote
+build authentication. Verify the GitHub run's actual commit separately.
+
+**No automatic flash/recovery installer is included.** TWRP steps stay conditional
+on DTBO/handoff compatibility, a specified image hash and a working route to the
+phone's own original boot. Existing unlock/root/backup status is respected.

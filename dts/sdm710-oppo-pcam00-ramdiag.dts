@@ -35,6 +35,12 @@
 			<0x1001b 0x2001a 0 0>,
 			<0x1001b 0x202001a 0 0>;
 	oppo,prjversion = <1 18097>;
+	oppo,ramdiag-revision = "pcam00-b-ramdiag-v4";
+
+	/* sdm670.dtsi already supplies memory@80000000; do not leave two
+	 * memory nodes after introducing the stock-compatible /memory path.
+	 */
+	/delete-node/ memory@80000000;
 
 	/* Match OPPO skeleton64.dtsi and live F.55 path exactly. ABL fills reg.
 	 * Do not guess RAM size or claim the new handoff is already tested.

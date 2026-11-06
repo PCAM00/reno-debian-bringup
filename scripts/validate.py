@@ -33,39 +33,19 @@ def require_config(path):
               for x in required if config.get("CONFIG_"+x) != "y"]
     errors += [f"CONFIG_{x} must be disabled" for x in prohibited
                if config.get("CONFIG_"+x, "n") != "n"]
+    if config.get('CONFIG_LOCALVERSION') != '"-oppo-pcam00-b-ramdiag-v4"':
+        errors.append('CONFIG_LOCALVERSION must identify the B v4 kernel')
     if errors:
         raise SystemExit("\n".join(errors))
-    return {"required_builtin": required, "prohibited": prohibited, "result": "PASS"}
+    return {"required_builtin": required, "prohibited": prohibited,
+            "revision": "pcam00-b-ramdiag-v4", "result": "PASS"}
+
+
+from image_formats import MAX_DTB, parse_fdt, read_regular
 
 
 def fdt_nodes(path):
-    b = path.read_bytes()
-    if len(b) < 40:
-        raise ValueError("Truncated FDT")
-    magic,total,off_struct,off_strings,_,version,_,_,strsz,structsz = struct.unpack_from(">10I", b)
-    if magic != 0xd00dfeed or total != len(b) or version < 17:
-        raise ValueError("Invalid FDT header")
-    strings = b[off_strings:off_strings+strsz]
-    pos,end = off_struct,off_struct+structsz
-    stack=[]; nodes={}
-    while pos < end:
-        tag,=struct.unpack_from(">I",b,pos);pos+=4
-        if tag == 1:
-            stop=b.index(0,pos,end);name=b[pos:stop].decode();pos=(stop+4)&~3
-            stack.append(name);nodes.setdefault('/'+'/'.join(stack[1:]),{})
-        elif tag == 2:
-            stack.pop()
-        elif tag == 3:
-            size,noff=struct.unpack_from('>II',b,pos);pos+=8
-            name=strings[noff:strings.index(0,noff)].decode()
-            nodes['/'+'/'.join(stack[1:])][name]=b[pos:pos+size];pos=(pos+size+3)&~3
-        elif tag == 4:
-            continue
-        elif tag == 9:
-            break
-        else:
-            raise ValueError(f"Unexpected FDT tag {tag}")
-    return nodes
+    return parse_fdt(read_regular(path, MAX_DTB))
 
 
 def require_dtb(path):
@@ -74,12 +54,38 @@ def require_dtb(path):
 
 def require_board_nodes(nodes):
     root=nodes['/']
-    if b'oppo,pcam00\0' not in root.get('compatible',b''):
-        raise ValueError('Not a Reno DTB')
+    expected_compat=b'oppo,pcam00\0qcom,sdm710\0qcom,sdm670\0'
+    if root.get('compatible') != expected_compat:
+        raise ValueError('Not the exact reviewed Reno compatible list')
+    if root.get('oppo,ramdiag-revision') != b'pcam00-b-ramdiag-v4\0':
+        raise ValueError('Wrong diagnostic DT revision')
     if root.get('oppo,prjversion') != struct.pack('>II',1,18097):
         raise ValueError('Wrong OPPO project ID')
     if root.get('qcom,board-id') != struct.pack('>II',8,0):
         raise ValueError('Wrong OPPO board ID')
+    if root.get('qcom,msm-id') != struct.pack('>4I',360,0,393,0):
+        raise ValueError('Wrong OPPO SoC identifier tuples')
+    if root.get('qcom,pmic-id') != struct.pack('>12I',0x1001b,0x1011a,0,0,0x1001b,0x2001a,0,0,0x1001b,0x202001a,0,0):
+        raise ValueError('Changed PMIC candidate identifiers; these are not proven live exact-match results')
+    if 'qcom,pmic-id-size' in root and root['qcom,pmic-id-size'] != struct.pack('>I',4):
+        raise ValueError('Unexpected PMIC tuple width')
+    for prop in ('#address-cells','#size-cells'):
+        if root.get(prop)!=struct.pack('>I',2):
+            raise ValueError('Require two-cell root addressing and size')
+    # Overlay products and numeric phandles from stock cannot be spliced into
+    # this tree. A passing structural validator is not an ABL handoff proof.
+    if any(n=='/soc' or n.startswith('/soc/') or n.startswith('/fragment@')
+           or n in ('/__fixups__','/__local_fixups__') for n in nodes):
+        raise ValueError('Unexpected stock/overlay namespace in board tree')
+    phandles={}
+    for node, props in nodes.items():
+        if 'phandle' in props:
+            raw=props['phandle']
+            if len(raw)!=4 or raw in (bytes(4),b'\xff'*4) or raw in phandles:
+                raise ValueError('Invalid or duplicate phandle')
+            phandles[raw]=node
+        if 'linux,phandle' in props and props.get('phandle',props['linux,phandle'])!=props['linux,phandle']:
+            raise ValueError('Conflicting phandle encodings')
     memory_nodes = [n for n,p in nodes.items() if p.get('device_type') == b'memory\0']
     if memory_nodes != ['/memory'] or nodes['/memory'].get('reg') != bytes(16):
         raise ValueError('Use original OPPO /memory zero-length placeholder; do not guess RAM')
@@ -99,8 +105,12 @@ def require_board_nodes(nodes):
         if not node.startswith('/reserved-memory/') or node.count('/') != 2:
             continue
         reg=props.get('reg',b'')
+        if not reg or len(reg)%16 or 'no-map' not in props:
+            raise ValueError(f'Expected fixed two-cell no-map reservation: {node}')
         for off in range(0,len(reg),16):
             address,length=struct.unpack_from('>QQ',reg,off)
+            if not length or address+length>1<<64:
+                raise ValueError(f'Invalid reserved range: {node}')
             spans.append((address,address+length,node))
     spans.sort()
     for a,b in zip(spans,spans[1:]):
@@ -121,6 +131,13 @@ def require_board_nodes(nodes):
         matches=[p for n,p in nodes.items() if n.endswith('/'+suffix)]
         if len(matches)!=1 or matches[0].get('status')!=b'disabled\0':
             raise ValueError(f'Expected disabled node: {suffix}')
+    prohibited_fragments=(b'ufshc',b'qmp-ufs',b'sdhci',b'arm,pl18',b'remoteproc',
+        b'charger',b'qpnp-smb',b'fastcg',b'vooc',b'bq25882',b'da9313',b'rmtfs')
+    for node, props in nodes.items():
+        compat=props.get('compatible',b'')
+        if any(value in compat for value in prohibited_fragments):
+            if props.get('status')!=b'disabled\0':
+                raise ValueError(f'Unexpected enabled prohibited device node: {node}')
     usb = nodes['/soc@0/usb@a6f8800/usb@a600000']
     if usb.get('phy-names') != b'usb2-phy\0' or len(usb.get('phys', b'')) != 4:
         raise ValueError('Diagnostic USB must use exactly one USB2 PHY')
@@ -138,10 +155,23 @@ def require_board_nodes(nodes):
             raise ValueError(f'Wrong OPPO USB PHY tuning: {prop}')
     if any(key in phy[0] for key in ('nvmem-cells', 'nvmem-cell-names')):
         raise ValueError('nvmem would overwrite OPPO fixed HSTX after DT override')
+    for prop, (lo,hi) in {
+        'vdd-supply': (880000,900000),
+        'vdda-pll-supply': (1800000,1800000),
+        'vdda-phy-dpdm-supply': (3088000,3100000)
+    }.items():
+        supply=phy[0].get(prop,b'')
+        if len(supply)!=4 or supply not in phandles:
+            raise ValueError(f'Unresolved USB supply: {prop}')
+        regulator=nodes[phandles[supply]]
+        if regulator.get('regulator-min-microvolt')!=struct.pack('>I',lo) or regulator.get('regulator-max-microvolt')!=struct.pack('>I',hi):
+            raise ValueError(f'Wrong voltage bounds on USB supply: {prop}')
     ufs = [p for n,p in nodes.items() if n.endswith('/ufshc@1d84000')][0]
     if ufs.get('lanes-per-direction') != struct.pack('>I', 1):
         raise ValueError('Reno UFS is single lane; still must stay disabled')
     return {'model':root['model'].rstrip(b'\0').decode(),
+            'revision': 'pcam00-b-ramdiag-v4',
+            'abl_exact_match_and_dtbo_skip': 'NOT_PROVEN_ON_TARGET',
             'official_source_audit': '61711727601fe83c11947f308e9987aaf2217652',
             'usb_tuning': tuning, 'usb_tune1_composed': '0x77',
             'memory_placeholder_path': '/memory', 'ufs_lanes_disabled': 1,
