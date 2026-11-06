@@ -43,7 +43,8 @@ def board_fixture():
     nodes["/"].update({
         "compatible": b"oppo,pcam00\0qcom,sdm710\0qcom,sdm670\0",
         "oppo,ramdiag-revision": (check.REVISION + "\0").encode(),
-        "qcom,msm-id": struct.pack(">4I", 360, 0, 393, 0),
+        "qcom,msm-id": struct.pack(">4I", 0x30168, 0, 0x30189, 0),
+        "oppo,ramdiag-board-variant": b"B-F3\0",
         "qcom,pmic-id": struct.pack(">12I", 0x1001b, 0x1011a, 0, 0,
                                     0x1001b, 0x2001a, 0, 0, 0x1001b, 0x202001a, 0, 0),
         "#address-cells": struct.pack(">I", 2), "#size-cells": struct.pack(">I", 2),

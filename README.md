@@ -2,6 +2,14 @@
 
 **REVISION: `pcam00-b-ramdiag-v4` · COMPILE-ONLY · NOT BOOTED ON HARDWARE · DO NOT FLASH.**
 
+**Board variant: B-F3.** B's later read-only socinfo reports foundry3 and
+subtype0; this variant changes only `qcom,msm-id` to
+`<0x30168 0 0x30189 0>` plus an explicit `B-F3` DT marker. Kernel/initramfs
+remain v4. Old Run7's foundry0 does not earn the ABL exact-foundry bit.
+Bound PM660/PM660L revid node names were observed; PMIC1's ABL-visible numeric
+model remains unconfirmed. This repair is not a claimed successful boot.
+See [F3 evidence and limits](<docs/B-F3-match-fix.md>).
+
 The user approved preparing and cloud-building this revision, not rebooting or
 flashing the phone. It is not a finished Debian installation, U-Boot image or
 EDK2 port. A successful Actions job is only compilation/structural evidence.

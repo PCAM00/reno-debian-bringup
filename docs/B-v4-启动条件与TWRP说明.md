@@ -17,7 +17,7 @@
 
 已审ABL的精确条件为 `(match & 0x34150000) == 0x34150000`。相关位涉及SoC ID、board/platform、subtype、foundry、前两个PMIC型号。SoC/revision或board/PMIC revision还参与其他排序，不能仅因候选使用revision0、运行SoC为1.1就断言一定不匹配。
 
-目前缺少足够的运行期foundry/PMIC/subtype对应证据，**不能确认候选必然走跳过板级DTBO的分支**。本版保留已据F.55记录的项目/SoC/PMIC候选元组，不为了“通过匹配”杜撰硬件信息。
+后续B机已只读返回foundry=3、subtype=0、platform_version=0x10000，第一PMIC socinfo型号为0x1001b；两个revid驱动节点分别名为pm660@0和pm660l@2，但该内核不导出其数值版本属性。F3板级变体据实把msm-id改为`<0x30168 0 0x30189 0>`；board和PMIC候选元组不改。PMIC1的ABL数值身份及实际hyp/overlay路径仍未证明，**不能宣称候选已确认跳过板级DTBO或可以成功启动**。具体依据见[F3匹配修正](<B-F3-match-fix.md>)。
 
 原始stock DTBO32对stock base本地可合并，对旧Run3主线树合并失败；stock节点ABI、符号/phandle和主线不同。补`-@`、拷贝符号或数字phandle不能自动变成兼容板树。原厂overlay还可能改供电/GPIO等；CONFIG_BLOCK=n也不使错误DT对所有硬件无害。
 

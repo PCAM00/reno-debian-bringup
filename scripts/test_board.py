@@ -26,7 +26,8 @@ def minimum_board():
     nodes={'/':{'compatible':b'oppo,pcam00\0qcom,sdm710\0qcom,sdm670\0','model':b'Fixture\0',
                 '#address-cells':U32(2),'#size-cells':U32(2),
                 'oppo,ramdiag-revision':b'pcam00-b-ramdiag-v4\0',
-                'qcom,msm-id':struct.pack('>4I',360,0,393,0),
+                'qcom,msm-id':struct.pack('>4I',0x30168,0,0x30189,0),
+                'oppo,ramdiag-board-variant':b'B-F3\0',
                 'qcom,pmic-id':struct.pack('>12I',0x1001b,0x1011a,0,0,0x1001b,0x2001a,0,0,0x1001b,0x202001a,0,0),
                 'oppo,prjversion':U32(1)+U32(18097),'qcom,board-id':U32(8)+U32(0)},
            '/memory':{'device_type':b'memory\0','reg':bytes(16)}}
@@ -67,6 +68,23 @@ class BoardTests(unittest.TestCase):
 
     def test_tune1_mapping(self):
         self.assertEqual((7 << 4) | (1 << 2) | 3,0x77)
+
+    def test_foundry3_encoding_and_old_candidate_rejection(self):
+        report=require_board_nodes(self.nodes)
+        self.assertEqual(report['board_variant'],'B-F3')
+        self.assertEqual(report['foundry_fields'],[3,3])
+        cells=struct.unpack('>4I',self.nodes['/']['qcom,msm-id'])
+        self.assertEqual([cells[i]&0xffff for i in (0,2)],[360,393])
+        for values in ((360,0,393,0),(0x30168,0,393,0),(360,0,0x30189,0),
+                       (0x20168,0,0x20189,0),(0x30168,1,0x30189,0)):
+            bad=copy.deepcopy(self.nodes)
+            bad['/']['qcom,msm-id']=struct.pack('>4I',*values)
+            with self.subTest(values=values),self.assertRaises(ValueError):require_board_nodes(bad)
+        for marker in (None,b'B-F0\0',b'B-F3'):
+            bad=copy.deepcopy(self.nodes)
+            if marker is None:bad['/'].pop('oppo,ramdiag-board-variant')
+            else:bad['/']['oppo,ramdiag-board-variant']=marker
+            with self.subTest(marker=marker),self.assertRaises(ValueError):require_board_nodes(bad)
 
     def test_regressions_rejected(self):
         phy='/soc@0/phy@88e2000'

@@ -63,8 +63,10 @@ def require_board_nodes(nodes):
         raise ValueError('Wrong OPPO project ID')
     if root.get('qcom,board-id') != struct.pack('>II',8,0):
         raise ValueError('Wrong OPPO board ID')
-    if root.get('qcom,msm-id') != struct.pack('>4I',360,0,393,0):
-        raise ValueError('Wrong OPPO SoC identifier tuples')
+    if root.get('qcom,msm-id') != struct.pack('>4I',0x30168,0,0x30189,0):
+        raise ValueError('Require B foundry3 SoC identifier tuples, not the old foundry0 fallback')
+    if root.get('oppo,ramdiag-board-variant') != b'B-F3\0':
+        raise ValueError('Require the distinct B-F3 board variant marker')
     if root.get('qcom,pmic-id') != struct.pack('>12I',0x1001b,0x1011a,0,0,0x1001b,0x2001a,0,0,0x1001b,0x202001a,0,0):
         raise ValueError('Changed PMIC candidate identifiers; these are not proven live exact-match results')
     if 'qcom,pmic-id-size' in root and root['qcom,pmic-id-size'] != struct.pack('>I',4):
@@ -171,6 +173,9 @@ def require_board_nodes(nodes):
         raise ValueError('Reno UFS is single lane; still must stay disabled')
     return {'model':root['model'].rstrip(b'\0').decode(),
             'revision': 'pcam00-b-ramdiag-v4',
+            'board_variant': 'B-F3',
+            'soc_id_low16': [360,393],
+            'foundry_fields': [3,3],
             'abl_exact_match_and_dtbo_skip': 'NOT_PROVEN_ON_TARGET',
             'official_source_audit': '61711727601fe83c11947f308e9987aaf2217652',
             'usb_tuning': tuning, 'usb_tune1_composed': '0x77',

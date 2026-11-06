@@ -29,13 +29,17 @@
 	model = "OPPO Reno PCAM00 (OP46B1) experimental RAM diagnostics";
 	compatible = "oppo,pcam00", "qcom,sdm710", "qcom,sdm670";
 	chassis-type = "handset";
-	qcom,msm-id = <360 0 393 0>;
+	/* B reports foundry_id=3. ABL compares SoC in bits0..15 and
+	 * foundry in bits16..23; keep revision cells and board/PMIC IDs.
+	 */
+	qcom,msm-id = <0x30168 0 0x30189 0>;
 	qcom,board-id = <8 0>;
 	qcom,pmic-id = <0x1001b 0x1011a 0 0>,
 			<0x1001b 0x2001a 0 0>,
 			<0x1001b 0x202001a 0 0>;
 	oppo,prjversion = <1 18097>;
 	oppo,ramdiag-revision = "pcam00-b-ramdiag-v4";
+	oppo,ramdiag-board-variant = "B-F3";
 
 	/* sdm670.dtsi already supplies memory@80000000; do not leave two
 	 * memory nodes after introducing the stock-compatible /memory path.
