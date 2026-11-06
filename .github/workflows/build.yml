@@ -76,6 +76,7 @@ jobs:
             artifacts/
             build.log
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
           compression-level: 1
       - name: Upload failure evidence only - no candidate image

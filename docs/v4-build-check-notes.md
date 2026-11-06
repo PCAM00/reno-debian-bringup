@@ -15,3 +15,9 @@
 独立的Image内嵌IKCONFIG gzip CRC验证和与kernel.config的逐字节相等检查保持不变；boot结构、实际init/helper/revision、源码快照一致性检查也没有移除。
 
 新增双横幅正/负测试；此前真实Image只用于核验横幅扫描函数，**不把Run3判为v4通过**。构建修复不说明手机可以启动。
+
+## GitHub artifact 隐藏文件遗漏
+
+Run6（commit `e4ae75084cada7ef31ecd3bdf57cae2f1f95e3ad`，run `42234781063`）云端成功。下载ZIP与GitHub摘要一致，但本地独立核验发现源码快照缺三项：`.github/workflows/build.yml`、`.github/workflows/build-uefi.yml`、`.gitignore`。其余已下载文件的大小/哈希均对应清单。
+
+原因是upload-artifact默认不包含隐藏文件。本地没有从工作树补文件冒充下载完整；Run6不作为完整交付通过。成功上传步骤改为 `include-hidden-files: true`，范围仍严格只限 `artifacts/` 和 `build.log`。源码快照由白名单产生，不复制仓库`.git`、凭据、设备备份或父项目目录。修复后须重新构建/下载并验证全部递归条目。
